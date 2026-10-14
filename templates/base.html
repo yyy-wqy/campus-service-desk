@@ -1,0 +1,18 @@
+{% load static %}
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}校园智办{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'css/base.css' %}">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="{% url 'core:home' %}">校园智办</a>
+  </header>
+  <main class="page-content">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>
