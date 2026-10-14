@@ -70,8 +70,14 @@ python manage.py runserver
 ```text
 campus-service-desk/
 ├── accounts/           # 用户模型及后续账号功能
+├── chat/               # 工单内实时文字沟通
 ├── config/             # Django 项目配置
+├── core/               # 首页及公共页面
 ├── docs/               # 需求与设计文档
+├── locations/          # 校园地点、楼栋及设施分类
+├── static/             # 公共 CSS、JavaScript 和图片资源
+├── templates/          # 公共页面模板
+├── tickets/            # 报修工单、分派、状态及评价
 ├── .env.example        # 本地配置示例
 ├── .gitignore          # 不上传的本地文件规则
 ├── manage.py           # Django 管理命令入口
@@ -86,6 +92,9 @@ campus-service-desk/
 - 教师、维修人员的审核状态字段
 - 中文界面语言与中国时区
 - 用户模型初始迁移文件
+- 账号、地点、工单、沟通和公共页面模块骨架
+- 各业务模块的独立路由入口
+- 公共模板和静态资源目录
 
 业务功能尚未完成。下一阶段将依次实现注册登录、个人信息、报修工单以及管理员分派流程。
 
@@ -98,6 +107,7 @@ campus-service-desk/
 ```powershell
 python manage.py check
 python manage.py makemigrations --check --dry-run
+python manage.py test
 ```
 
 项目第一版的完整业务范围和验收要求见 `docs/校园智办_第一版需求与产品设计_V1.0.docx`。
