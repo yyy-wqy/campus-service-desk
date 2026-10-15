@@ -1,0 +1,21 @@
+{% extends "registration/base.html" %}
+
+{% block title %}账号状态 | 校园智办{% endblock %}
+{% block auth_content %}
+  <header class="auth-form-heading">
+    <p class="eyebrow">账号状态</p>
+    <h2>暂时无法进入平台</h2>
+  </header>
+  <div class="form-alert" role="alert">
+    {% if user.approval_status == 'pending' %}
+      账号待审核，请等待管理员审核通过后再登录。
+    {% elif user.approval_status == 'rejected' %}
+      账号审核未通过：{{ user.approval_reason|default:'请联系管理员了解详情。' }}
+    {% else %}
+      账号状态异常，请联系管理员。
+    {% endif %}
+  </div>
+  <form class="login-form" method="post" action="{% url 'accounts:logout' %}">
+    {% csrf_token %}<button class="button button-primary button-wide" type="submit">退出登录</button>
+  </form>
+{% endblock %}

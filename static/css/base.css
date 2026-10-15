@@ -259,6 +259,10 @@ svg { display: block; }
 .field-control > svg { width: 19px; flex: 0 0 auto; color: var(--ink-500); fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.6; }
 .field-control input { width: 100%; min-width: 0; height: 48px; padding: 0 11px; color: var(--ink-950); background: transparent; border: 0; outline: 0; font-size: 14px; }
 .field-control input::placeholder { color: #9aadaa; }
+.field-control select { width: 100%; min-width: 0; min-height: 48px; padding: 0 11px; color: var(--ink-950); background: transparent; border: 0; font-size: 14px; }
+.field-control select:focus-visible { outline: 2px solid #55b795; outline-offset: 2px; }
+.field-help { margin-top: 7px; color: var(--ink-600); font-size: 12px; line-height: 1.6; }
+.field-help ul { margin: 0; padding-left: 18px; }
 .password-toggle { display: grid; width: 34px; height: 34px; flex: 0 0 auto; padding: 0; color: var(--ink-500); background: transparent; border: 0; border-radius: 8px; cursor: pointer; place-items: center; }
 .password-toggle:hover, .password-toggle.is-visible { color: var(--ink-950); background: var(--mist-50); }
 .password-toggle svg { width: 19px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.6; }
