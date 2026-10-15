@@ -1,0 +1,24 @@
+{% extends "registration/base.html" %}
+
+{% block title %}注册 | 校园智办{% endblock %}
+{% block auth_content %}
+  <header class="auth-form-heading">
+    <p class="eyebrow">账号注册</p>
+    <h2>创建新账号</h2>
+    <p>学生注册后即可登录；教师和维修人员需等待管理员审核身份。</p>
+  </header>
+  {% if form.non_field_errors %}<div class="form-alert" role="alert">{{ form.non_field_errors }}</div>{% endif %}
+  <form class="login-form" method="post" action="{% url 'accounts:register' %}">
+    {% csrf_token %}
+    {% for field in form %}
+      <div class="field-group">
+        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+        <div class="field-control">{{ field }}</div>
+        {% if field.help_text %}<div class="field-help">{{ field.help_text|safe }}</div>{% endif %}
+        {% if field.errors %}<div class="field-error" role="alert">{{ field.errors }}</div>{% endif %}
+      </div>
+    {% endfor %}
+    <button class="button button-primary button-wide" type="submit">提交注册</button>
+  </form>
+  <p class="auth-switch">已有账号？ <a href="{% url 'accounts:login' %}">去登录</a></p>
+{% endblock %}

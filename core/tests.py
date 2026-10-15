@@ -12,13 +12,9 @@ class PublicPageTests(TestCase):
         self.assertContains(response, "登录")
         self.assertContains(response, "创建账号")
 
-    def test_login_preview_uses_account_credentials_without_role_selector(self):
+    def test_former_login_preview_redirects_to_login(self):
         response = self.client.get(reverse("core:login_preview"))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'name="username"')
-        self.assertContains(response, 'name="password"')
-        self.assertNotContains(response, 'name="role"')
+        self.assertRedirects(response, reverse("accounts:login"))
 
 
 class RoleNavigationTests(TestCase):
@@ -30,6 +26,7 @@ class RoleNavigationTests(TestCase):
                 username=f"{role}_user",
                 password="test-password",
                 role=role,
+                approval_status="approved",
             )
             for role in ("student", "teacher", "maintenance", "admin")
         }

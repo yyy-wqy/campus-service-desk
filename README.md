@@ -96,7 +96,27 @@ campus-service-desk/
 - 各业务模块的独立路由入口
 - 公共模板和静态资源目录
 
-业务功能尚未完成。下一阶段将依次实现注册登录、个人信息、报修工单以及管理员分派流程。
+已接入账号注册、登录、退出及角色与审核状态校验；个人信息、报修工单以及管理员分派等业务功能仍待实现。
+
+## 账号功能（Issue #4）
+
+- 注册入口：`/accounts/register/`，仅提供学生、教师、维修人员三种身份，填写账号、姓名、联系方式和两次密码。
+- 学生注册后为已通过；教师和维修人员注册后为待审核。审核状态及管理员权限由服务端控制，不能通过提交表单修改。
+- 登录入口：`/accounts/login/`，仅输入账号和密码。验证成功后系统从数据库读取账号角色，登录请求中的角色参数不会改变身份或权限。待审核账号不能登录，审核未通过时显示审核说明。原 `/ui/login/` 地址跳转到正式登录页。
+- 登录成功后进入首页。顶部“退出登录”使用带 CSRF 校验的 POST 请求结束会话。
+- 业务访问由 `accounts.middleware.BusinessAccessMiddleware` 统一校验，包括已登录账号审核状态发生变化的情况。账号模块除注册、登录、退出外的页面也受此校验；后续业务视图仍需按各自要求校验角色和数据归属。
+- 本次无需新增数据库迁移。自动测试使用独立测试数据库，不会创建本地演示账号。
+
+管理员由维护者预置，不能通过注册页面创建。若使用 Django 的 `createsuperuser` 命令，需再在 `python manage.py shell` 中显式设置该账号的平台角色和审核状态（将示例账号名替换为实际账号）：
+
+```python
+from accounts.models import User
+User.objects.filter(username="实际管理员账号").update(
+    role=User.Role.ADMIN, approval_status=User.ApprovalStatus.APPROVED
+)
+```
+
+审核管理页面由后续任务实现；本地验收可在 Django shell 中将教师或维修人员的 `approval_status` 更新为 `approved` 或 `rejected`，并按需填写 `approval_reason`，再验证登录提示。
 
 ## 协作约定
 

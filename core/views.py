@@ -1,4 +1,4 @@
-from django.shortcuts import render
+from django.shortcuts import redirect, render
 
 
 def home(request):
@@ -6,5 +6,5 @@ def home(request):
 
 
 def login_preview(request):
-    """Render the shared login UI until the accounts app connects authentication."""
-    return render(request, "registration/login.html", {"preview_mode": True})
+    """Keep the former preview URL working after authentication is connected."""
+    return redirect("accounts:login")

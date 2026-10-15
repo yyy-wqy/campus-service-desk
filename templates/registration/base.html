@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}账号 | 校园智办{% endblock %}
+{% block body_class %}auth-page{% endblock %}
+
+{% block body %}
+  <main class="auth-layout" id="main-content">
+    <section class="auth-story" aria-label="平台介绍">
+      <a class="auth-brand" href="{% url 'core:home' %}">
+        <span class="brand-mark brand-mark-light" aria-hidden="true">
+          <svg viewBox="0 0 32 32"><path d="M6 11.5 16 6l10 5.5v9L16 26 6 20.5v-9Z"/><path d="m11 14 5-2.7 5 2.7v5l-5 2.7-5-2.7v-5Z"/></svg>
+        </span>
+        <span><strong>校园智办</strong><small>校园事务服务平台</small></span>
+      </a>
+
+      <div class="auth-story-content">
+        <p class="auth-kicker"><span></span>连接每一次校园服务</p>
+        <h1>报修有回应，<br>处理有进度。</h1>
+        <p>从问题提交到双方确认，校园智办让每一张工单都有清晰、可信的处理记录。</p>
+      </div>
+
+      <div class="auth-proof" aria-label="平台服务特点">
+        <div><strong>统一入口</strong><span>减少信息遗漏</span></div>
+        <div><strong>角色协作</strong><span>职责边界清楚</span></div>
+        <div><strong>全程留痕</strong><span>进度随时可查</span></div>
+      </div>
+      <div class="story-orb story-orb-one" aria-hidden="true"></div>
+      <div class="story-orb story-orb-two" aria-hidden="true"></div>
+    </section>
+
+    <section class="auth-form-side">
+      <div class="auth-form-wrap">
+        <a class="back-link" href="{% url 'core:home' %}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>返回首页
+        </a>
+
+        {% if messages %}
+          <div class="message-list" aria-live="polite">
+            {% for message in messages %}<div class="message message-{{ message.tags|default:'info' }}">{{ message }}</div>{% endfor %}
+          </div>
+        {% endif %}
+        {% block auth_content %}{% endblock %}
+      </div>
+    </section>
+  </main>
+{% endblock %}
