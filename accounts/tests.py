@@ -91,7 +91,7 @@ class RegistrationTests(TestCase):
     def test_new_student_can_log_in(self):
         self.client.post(reverse("accounts:register"), self.payload())
         response = self.client.post(reverse("accounts:login"), {
-            "username": "20261015001", "password": PASSWORD, "role": "student",
+            "username": "20261015001", "password": PASSWORD,
         }, follow=True)
         self.assertRedirects(response, reverse("core:home"))
         self.assertContains(response, "退出登录")
@@ -103,28 +103,44 @@ class LoginTests(TestCase):
         for role in User.Role.values:
             User.objects.create_user(username=role, password=PASSWORD, role=role, approval_status="approved")
 
-    def login(self, role="student", **extra):
+    def login(self, account="student", **extra):
         return self.client.post(reverse("accounts:login"), {
-            "username": role, "password": PASSWORD, "role": role, **extra,
+            "username": account, "password": PASSWORD, **extra,
         })
 
-    def test_approved_roles_can_log_in(self):
+    def test_login_page_only_requests_account_and_password(self):
+        response = self.client.get(reverse("accounts:login"))
+        self.assertContains(response, 'name="username"')
+        self.assertContains(response, 'name="password"')
+        self.assertNotContains(response, 'name="role"')
+        self.assertNotIn("role", response.context["form"].fields)
+
+    def test_approved_roles_can_log_in_without_supplying_role(self):
         for role in User.Role.values:
             with self.subTest(role=role):
                 response = self.login(role)
                 self.assertRedirects(response, reverse("core:home"))
                 user = User.objects.get(username=role)
                 self.assertEqual(self.client.session[SESSION_KEY], str(user.pk))
+                home = self.client.get(reverse("core:home"))
+                self.assertEqual(home.context["user"].role, role)
+                self.assertContains(home, user.get_role_display())
                 self.client.logout()
 
-    def test_wrong_role_is_rejected_without_changing_stored_role(self):
-        response = self.login(username="student", role="admin")
-        self.assertContains(response, "所选角色与账号实际角色不一致")
-        self.assertNotIn(SESSION_KEY, self.client.session)
-        self.assertEqual(User.objects.get(username="student").role, "student")
+    def test_submitted_role_cannot_override_database_role(self):
+        for role in ("admin", "", "invalid"):
+            with self.subTest(role=role):
+                response = self.login(role=role)
+                self.assertRedirects(response, reverse("core:home"))
+                home = self.client.get(reverse("core:home"))
+                self.assertEqual(home.context["user"].role, "student")
+                self.assertContains(home, "提交报修")
+                self.assertNotContains(home, "用户审核")
+                self.assertEqual(User.objects.get(username="student").role, "student")
+                self.client.logout()
 
-    def test_wrong_password_unknown_account_inactive_and_missing_role_are_rejected(self):
-        for extra in ({"password": "wrong"}, {"username": "unknown"}, {"role": ""}, {"role": "invalid"}):
+    def test_wrong_password_unknown_account_and_inactive_account_are_rejected(self):
+        for extra in ({"password": "wrong"}, {"username": "unknown"}):
             with self.subTest(extra=extra):
                 response = self.login(**extra)
                 self.assertEqual(response.status_code, 200)
@@ -135,12 +151,18 @@ class LoginTests(TestCase):
         self.assertTrue(response.context["form"].errors)
         self.assertNotIn(SESSION_KEY, self.client.session)
 
+    def test_invalid_database_role_cannot_log_in(self):
+        User.objects.filter(username="student").update(role="invalid")
+        response = self.login()
+        self.assertContains(response, "账号角色异常")
+        self.assertNotIn(SESSION_KEY, self.client.session)
+
     def test_pending_and_rejected_accounts_cannot_log_in(self):
         for role in ("teacher", "maintenance"):
             for status, text in (("pending", "账号待审核"), ("rejected", "账号审核未通过")):
                 with self.subTest(role=role, status=status):
                     User.objects.filter(username=role).update(approval_status=status, approval_reason="请核实工号")
-                    response = self.login(role)
+                    response = self.login(role, role="admin")
                     self.assertContains(response, text)
                     if status == "rejected":
                         self.assertContains(response, "请核实工号")
@@ -179,7 +201,7 @@ class LoginTests(TestCase):
             self.assertEqual(client.post(reverse(f"accounts:{name}"), {}).status_code, 403)
         client.get(reverse("accounts:login"))
         response = client.post(reverse("accounts:login"), {
-            "username": "student", "password": PASSWORD, "role": "student",
+            "username": "student", "password": PASSWORD,
             "csrfmiddlewaretoken": client.cookies["csrftoken"].value,
         })
         self.assertEqual(response.status_code, 302)

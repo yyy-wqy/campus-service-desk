@@ -3,17 +3,12 @@
 {% block auth_content %}
   <header class="auth-form-heading">
     <p class="eyebrow">账号登录</p><h2>欢迎回来</h2>
-    <p>选择注册时的身份，输入账号和密码进入平台。</p>
+    <p>输入账号和密码，系统将自动识别你的身份。</p>
   </header>
   {% if form.non_field_errors %}<div class="form-alert" role="alert">{{ form.non_field_errors }}</div>{% endif %}
   <form class="login-form" method="post" action="{% url 'accounts:login' %}">
     {% csrf_token %}
     <input type="hidden" name="next" value="{{ next }}">
-    <div class="field-group">
-      <label for="{{ form.role.id_for_label }}">登录身份</label>
-      <div class="field-control">{{ form.role }}</div>
-      <div class="field-error">{{ form.role.errors }}</div>
-    </div>
     <div class="field-group">
       <label for="id_username">账号</label>
       <div class="field-control"><input id="id_username" name="username" type="text" maxlength="150" autocomplete="username" value="{{ form.username.value|default_if_none:'' }}" placeholder="请输入学号、工号或账号" required></div>

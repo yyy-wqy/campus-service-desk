@@ -30,15 +30,12 @@ class RegistrationForm(UserCreationForm):
         return user
 
 
-class RoleAuthenticationForm(AuthenticationForm):
-    role = forms.ChoiceField(label="登录身份", choices=User.Role.choices)
-
+class AccountAuthenticationForm(AuthenticationForm):
     def confirm_login_allowed(self, user):
         super().confirm_login_allowed(user)
-        if self.cleaned_data.get("role") != user.role:
+        if user.role not in User.Role.values:
             raise ValidationError(
-                "所选角色与账号实际角色不一致，请选择正确的登录身份。",
-                code="role_mismatch",
+                "账号角色异常，请联系管理员。", code="invalid_role"
             )
         if user.approval_status == User.ApprovalStatus.PENDING:
             raise ValidationError(
