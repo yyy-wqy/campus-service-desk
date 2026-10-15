@@ -6,4 +6,5 @@ app_name = "core"
 
 urlpatterns = [
     path("", views.home, name="home"),
+    path("ui/login/", views.login_preview, name="login_preview"),
 ]

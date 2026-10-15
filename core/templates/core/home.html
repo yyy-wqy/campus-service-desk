@@ -3,9 +3,45 @@
 {% block title %}首页 | 校园智办{% endblock %}
 
 {% block content %}
-  <section class="welcome-panel">
-    <p class="eyebrow">校园事务报修与服务工单管理平台</p>
-    <h1>基础项目已就绪</h1>
-    <p>账号、地点、工单和沟通模块已完成目录初始化，可以开始分模块开发。</p>
+  <section class="home-hero">
+    <div class="hero-copy">
+      <p class="eyebrow">校园事务报修与服务工单管理平台</p>
+      {% if user.is_authenticated %}
+        <h1>{{ user.real_name|default:user.username }}，欢迎回来</h1>
+        <p class="hero-summary">你当前以{{ user.get_role_display }}身份登录。所有报修记录、处理进度和沟通信息将在统一入口中持续更新。</p>
+      {% else %}
+        <h1>校园设施报修，从提交到完成全程可追踪</h1>
+        <p class="hero-summary">连接师生、维修人员和后勤管理，让问题有记录、处理有进度、完成有确认。</p>
+        <div class="hero-actions">
+          <a class="button button-primary" href="{% url 'core:login_preview' %}">进入平台</a>
+          <a class="button button-secondary" href="#service-flow">了解处理流程</a>
+        </div>
+      {% endif %}
+    </div>
+    <div class="hero-visual" aria-label="报修工单处理概览">
+      <div class="visual-header"><span>服务进度</span><span class="status-chip status-processing">处理中</span></div>
+      <div class="ticket-preview">
+        <div class="ticket-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 3h10a2 2 0 0 1 2 2v16l-7-3-7 3V5a2 2 0 0 1 2-2Z"/><path d="M9 8h6M9 12h4"/></svg></div>
+        <div><strong>教学楼照明故障</strong><span>工单 CS202610140018</span></div>
+      </div>
+      <ol class="progress-track">
+        <li class="is-complete"><span></span><div><strong>报修已提交</strong><small>信息记录完成</small></div></li>
+        <li class="is-complete"><span></span><div><strong>管理员已分派</strong><small>维修人员已收到任务</small></div></li>
+        <li class="is-current"><span></span><div><strong>正在处理</strong><small>进度将实时更新</small></div></li>
+        <li><span></span><div><strong>双方确认完成</strong><small>等待维修结果</small></div></li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="service-section" id="service-flow">
+    <div class="section-heading">
+      <div><p class="eyebrow">服务流程</p><h2>每一步都有明确责任人</h2></div>
+      <p>提交、分派、处理和确认形成完整记录，方便报修人与处理人员随时了解当前进展。</p>
+    </div>
+    <div class="feature-grid">
+      <article class="feature-card"><span class="feature-number">01</span><h3>统一提交</h3><p>按地点和故障类别填写信息，减少线下沟通中的遗漏。</p></article>
+      <article class="feature-card featured"><span class="feature-number">02</span><h3>进度可查</h3><p>受理、分派和维修进展集中展示，重要变化清晰可见。</p></article>
+      <article class="feature-card"><span class="feature-number">03</span><h3>双方确认</h3><p>维修人员提交结果，报修人确认解决后工单正式完成。</p></article>
+    </div>
   </section>
 {% endblock %}

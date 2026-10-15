@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}登录 | 校园智办{% endblock %}
+{% block body_class %}auth-page{% endblock %}
+
+{% block body %}
+  <main class="auth-layout" id="main-content">
+    <section class="auth-story" aria-label="平台介绍">
+      <a class="auth-brand" href="{% url 'core:home' %}">
+        <span class="brand-mark brand-mark-light" aria-hidden="true">
+          <svg viewBox="0 0 32 32"><path d="M6 11.5 16 6l10 5.5v9L16 26 6 20.5v-9Z"/><path d="m11 14 5-2.7 5 2.7v5l-5 2.7-5-2.7v-5Z"/></svg>
+        </span>
+        <span><strong>校园智办</strong><small>校园事务服务平台</small></span>
+      </a>
+
+      <div class="auth-story-content">
+        <p class="auth-kicker"><span></span>连接每一次校园服务</p>
+        <h1>报修有回应，<br>处理有进度。</h1>
+        <p>从问题提交到双方确认，校园智办让每一张工单都有清晰、可信的处理记录。</p>
+      </div>
+
+      <div class="auth-proof" aria-label="平台服务特点">
+        <div><strong>统一入口</strong><span>减少信息遗漏</span></div>
+        <div><strong>角色协作</strong><span>职责边界清楚</span></div>
+        <div><strong>全程留痕</strong><span>进度随时可查</span></div>
+      </div>
+      <div class="story-orb story-orb-one" aria-hidden="true"></div>
+      <div class="story-orb story-orb-two" aria-hidden="true"></div>
+    </section>
+
+    <section class="auth-form-side">
+      <div class="auth-form-wrap">
+        <a class="back-link" href="{% url 'core:home' %}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>返回首页
+        </a>
+
+        <header class="auth-form-heading">
+          <p class="eyebrow">账号登录</p>
+          <h2>欢迎回来</h2>
+          <p>输入账号和密码，系统将根据账户信息进入对应工作台。</p>
+        </header>
+
+        {% if preview_mode %}
+          <div class="preview-notice" role="note">当前展示登录界面设计，账号验证功能将由账号模块接入。</div>
+        {% endif %}
+        {% if form.non_field_errors %}<div class="form-alert" role="alert">{{ form.non_field_errors }}</div>{% endif %}
+
+        <form class="login-form" method="post" {% if preview_mode %}onsubmit="return false"{% endif %}>
+          {% csrf_token %}
+          <div class="field-group">
+            <label for="id_username">账号</label>
+            <div class="field-control">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm8 9a8 8 0 0 0-16 0"/></svg>
+              <input id="id_username" name="username" type="text" autocomplete="username" value="{{ form.username.value|default_if_none:'' }}" placeholder="请输入学号、工号或账号" required>
+            </div>
+            {% if form.username.errors %}<div class="field-error">{{ form.username.errors }}</div>{% endif %}
+          </div>
+
+          <div class="field-group">
+            <div class="field-label-row"><label for="id_password">密码</label><a href="/accounts/password-reset/">忘记密码？</a></div>
+            <div class="field-control">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10V8a5 5 0 0 1 10 0v2M6 10h12a2 2 0 0 1 2 2v8H4v-8a2 2 0 0 1 2-2Z"/></svg>
+              <input id="id_password" name="password" type="password" autocomplete="current-password" placeholder="请输入密码" required>
+              <button class="password-toggle" type="button" data-password-toggle aria-label="显示密码">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Zm10 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/></svg>
+              </button>
+            </div>
+            {% if form.password.errors %}<div class="field-error">{{ form.password.errors }}</div>{% endif %}
+          </div>
+
+          <button class="button button-primary button-wide" type="submit" {% if preview_mode %}aria-disabled="true"{% endif %}>
+            <span>登录平台</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"/></svg>
+          </button>
+        </form>
+
+        <p class="auth-switch">还没有账号？ <a href="/accounts/register/">创建新账号</a></p>
+        <p class="auth-help">教师和维修人员注册后需等待管理员审核。</p>
+      </div>
+    </section>
+  </main>
+{% endblock %}
