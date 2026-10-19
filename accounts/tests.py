@@ -26,7 +26,7 @@ urlpatterns = [
 class RegistrationTests(TestCase):
     def payload(self, **extra):
         return {
-            "username": "20261015001", "real_name": "测试用户",
+            "username": "202610150001", "real_name": "测试用户",
             "phone": "13800138000", "role": "student",
             "password1": PASSWORD, "password2": PASSWORD, **extra,
         }
@@ -42,12 +42,13 @@ class RegistrationTests(TestCase):
     def test_all_public_roles_register_with_server_controlled_status(self):
         for role in ("student", "teacher", "maintenance"):
             with self.subTest(role=role):
+                username = "202610150001" if role == "student" else role
                 response = self.client.post(reverse("accounts:register"), self.payload(
-                    username=role, role=role, approval_status="approved",
+                    username=username, role=role, approval_status="approved",
                     is_staff="true", is_superuser="true", approval_reason="forged",
                 ), follow=True)
                 self.assertRedirects(response, reverse("accounts:login"))
-                user = User.objects.get(username=role)
+                user = User.objects.get(username=username)
                 self.assertEqual(user.role, role)
                 expected = "approved" if role == "student" else "pending"
                 self.assertEqual(user.approval_status, expected)
@@ -72,7 +73,7 @@ class RegistrationTests(TestCase):
         self.assertFalse(User.objects.exists())
 
     def test_duplicate_username_is_rejected(self):
-        User.objects.create_user(username="20261015001", password=PASSWORD)
+        User.objects.create_user(username="202610150001", password=PASSWORD)
         response = self.client.post(reverse("accounts:register"), self.payload())
         self.assertIn("username", response.context["form"].errors)
         self.assertEqual(User.objects.count(), 1)
@@ -91,7 +92,7 @@ class RegistrationTests(TestCase):
     def test_new_student_can_log_in(self):
         self.client.post(reverse("accounts:register"), self.payload())
         response = self.client.post(reverse("accounts:login"), {
-            "username": "20261015001", "password": PASSWORD,
+            "username": "202610150001", "password": PASSWORD,
         }, follow=True)
         self.assertRedirects(response, reverse("core:home"))
         self.assertContains(response, "退出登录")

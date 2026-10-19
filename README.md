@@ -101,6 +101,7 @@ campus-service-desk/
 ## 账号功能（Issue #4）
 
 - 注册入口：`/accounts/register/`，仅提供学生、教师、维修人员三种身份，填写账号、姓名、联系方式和两次密码。
+- 注册格式校验（Issue #10）：所有角色手机号必须为 11 位半角数字，学生账号作为学号必须为 12 位半角数字，教师和维修人员账号沿用原有规则。前后端均校验格式，不接受空格或全角数字；以字符串存储以保留前导零。失败后保留非密码信息。
 - 学生注册后为已通过；教师和维修人员注册后为待审核。审核状态及管理员权限由服务端控制，不能通过提交表单修改。
 - 登录入口：`/accounts/login/`，仅输入账号和密码。验证成功后系统从数据库读取账号角色，登录请求中的角色参数不会改变身份或权限。待审核账号不能登录，审核未通过时显示审核说明。原 `/ui/login/` 地址跳转到正式登录页。
 - 登录成功后进入首页。顶部“退出登录”使用带 CSRF 校验的 POST 请求结束会话。
@@ -128,6 +129,12 @@ User.objects.filter(username="实际管理员账号").update(
 python manage.py check
 python manage.py makemigrations --check --dry-run
 python manage.py test
+```
+
+注册页角色切换与校验提示的 JavaScript 测试使用 Node.js 内置测试运行器，无需额外 npm 依赖：
+
+```powershell
+node --test tests/js/register.test.cjs
 ```
 
 项目第一版的完整业务范围和验收要求见 `docs/校园智办_第一版需求与产品设计_V1.0.docx`。

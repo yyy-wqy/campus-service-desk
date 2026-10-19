@@ -1,4 +1,5 @@
 {% extends "registration/base.html" %}
+{% load static %}
 
 {% block title %}注册 | 校园智办{% endblock %}
 {% block auth_content %}
@@ -8,17 +9,24 @@
     <p>学生注册后即可登录；教师和维修人员需等待管理员审核身份。</p>
   </header>
   {% if form.non_field_errors %}<div class="form-alert" role="alert">{{ form.non_field_errors }}</div>{% endif %}
-  <form class="login-form" method="post" action="{% url 'accounts:register' %}">
+  <form class="login-form" method="post" action="{% url 'accounts:register' %}" data-registration-form>
     {% csrf_token %}
     {% for field in form %}
       <div class="field-group">
         <label for="{{ field.id_for_label }}">{{ field.label }}</label>
         <div class="field-control">{{ field }}</div>
-        {% if field.help_text %}<div class="field-help">{{ field.help_text|safe }}</div>{% endif %}
+        {% if field.help_text %}<div class="field-help" id="{{ field.auto_id }}_helptext">{{ field.help_text|safe }}</div>{% endif %}
         {% if field.errors %}<div class="field-error" role="alert">{{ field.errors }}</div>{% endif %}
+        {% if field.name == 'username' or field.name == 'phone' %}
+          <div class="field-error" data-validation-error="{{ field.name }}" aria-live="polite"></div>
+        {% endif %}
       </div>
     {% endfor %}
     <button class="button button-primary button-wide" type="submit">提交注册</button>
   </form>
   <p class="auth-switch">已有账号？ <a href="{% url 'accounts:login' %}">去登录</a></p>
+{% endblock %}
+
+{% block extra_js %}
+  <script src="{% static 'js/register.js' %}" defer></script>
 {% endblock %}
