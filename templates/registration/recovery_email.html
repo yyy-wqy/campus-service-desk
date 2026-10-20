@@ -1,0 +1,13 @@
+{% extends "registration/base.html" %}
+{% block title %}找回邮箱 | 校园智办{% endblock %}
+{% block auth_content %}
+  <header class="auth-form-heading">
+    <p class="eyebrow">账号安全</p><h2>绑定找回邮箱</h2>
+    <p>填写本人可访问的邮箱，并输入当前密码确认。忘记密码时将使用此邮箱找回。</p>
+  </header>
+  <form class="login-form" method="post">
+    {% csrf_token %}
+    {% include "registration/recovery_fields.html" %}
+    <button class="button button-primary button-wide" type="submit">保存找回邮箱</button>
+  </form>
+{% endblock %}

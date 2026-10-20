@@ -11,11 +11,16 @@ class RegistrationForm(UserCreationForm):
         choices=[choice for choice in User.Role.choices if choice[0] != User.Role.ADMIN],
     )
     real_name = forms.CharField(label="姓名", max_length=50)
+    email = forms.EmailField(
+        label="找回邮箱（选填）", required=False, max_length=254,
+        help_text="用于接收密码重置链接，请填写本人可访问的邮箱。",
+        widget=forms.EmailInput(attrs={"autocomplete": "email"}),
+    )
     phone = forms.CharField(label="联系方式", max_length=30)
 
     class Meta(UserCreationForm.Meta):
         model = User
-        fields = ("role", "username", "real_name", "phone")
+        fields = ("role", "username", "real_name", "phone", "email")
         labels = {"username": "学号 / 工号 / 账号"}
 
     def save(self, commit=True):
