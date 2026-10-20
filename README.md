@@ -118,6 +118,35 @@ User.objects.filter(username="实际管理员账号").update(
 
 审核管理页面由后续任务实现；本地验收可在 Django shell 中将教师或维修人员的 `approval_status` 更新为 `approved` 或 `rejected`，并按需填写 `approval_reason`，再验证登录提示。
 
+## 忘记密码与本地控制台邮件（Issue #14）
+
+注册时可选填找回邮箱；已有用户登录后点击账号导航中的“找回邮箱”，输入当前密码确认绑定或更换。使用用户模型已有 `email` 字段，无需数据库迁移。未绑定邮箱且已经忘记密码的用户，需要联系维护者核验身份后处理。
+
+登录页“忘记密码”入口为 `/accounts/password-reset/`，填写账号和绑定邮箱。匹配且账号启用、有可用密码时生成重置邮件，链接有效期 1 小时，使用成功即失效；重置后需重新登录，原会话随密码变更失效。账号角色和审核状态不改变，未审核通过的账号重置后仍不能登录业务页面。
+
+本地 `DEBUG=True` 默认使用控制台邮件后端，**不向真实邮箱发信，也不产生邮件服务费用**。显式配置与运行方式：
+
+```powershell
+$env:DJANGO_EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+.\.venv\Scripts\python.exe manage.py runserver
+```
+
+本地验收步骤：
+
+1. 注册账号并填写找回邮箱（可使用 `student@example.com` 这样的测试地址），或用现有账号登录后绑定。
+2. 退出登录，在“忘记密码”页填写相同账号和邮箱。
+3. 从运行 `runserver` 的终端中复制 `http://127.0.0.1:8000/accounts/reset/...` 链接，在浏览器打开。
+4. 输入两次符合强度要求的新密码，返回登录页验证新密码可用、旧密码不可用。
+5. 再次打开已用链接应显示失效。连续申请同一账号需间隔至少 60 秒。
+
+若由后台进程启动本地服务，邮件内容会进入该进程的输出日志；本地助手启动的日志位于 `.venv/server.stdout.log`。控制台邮件包含有效重置链接，仅供开发者查看，不应暴露为公开日志；测试完可关闭服务。
+
+自动测试：`python manage.py test accounts.test_password_recovery`。使用测试邮箱后端和控制台捕获验证，不向外发信，也不创建本地演示账号。
+
+后续真实发信才需要 SMTP 配置，环境变量示例见 `.env.example`。配置 `DJANGO_EMAIL_BACKEND`、`DJANGO_DEFAULT_FROM_EMAIL`、`DJANGO_EMAIL_HOST`、`DJANGO_EMAIL_PORT`、`DJANGO_EMAIL_HOST_USER`、`DJANGO_EMAIL_HOST_PASSWORD` 和对应加密方式；SSL 与 STARTTLS 二选一。当前 `.env` 不会自动读取，配置需要设置到进程环境中。生产部署还需设置真实 `SECRET_KEY`、明确的 `ALLOWED_HOSTS` 和 HTTPS 可访问地址，不能使用控制台日志作为用户收信方式。
+
+重置申请对未知账号、邮箱不匹配、停用账号等均返回相同受理提示，不在页面返回链接；限频使用 Django cache，每账号 60 秒一次。本地默认缓存仅适用于当前服务进程，生产多进程部署需配置共享缓存。
+
 ## 协作约定
 
 每项工作从最新的 `main` 创建任务分支，通过 Pull Request 审核后合并。不要直接向 `main` 推送未检查的功能代码。

@@ -15,7 +15,9 @@ class BusinessAccessMiddleware(MiddlewareMixin):
     def process_view(self, request, view_func, view_args, view_kwargs):
         match = request.resolver_match
         if match.view_name in {
-            "accounts:login", "accounts:register", "accounts:logout", "core:login_preview"
+            "accounts:login", "accounts:register", "accounts:logout", "core:login_preview",
+            "accounts:password_reset", "accounts:password_reset_done",
+            "accounts:password_reset_confirm", "accounts:password_reset_complete",
         }:
             return None
         if match.namespace not in {"core", "accounts", "tickets", "locations", "chat", "admin"}:
