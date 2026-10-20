@@ -3,6 +3,7 @@ from django.contrib.auth.forms import PasswordResetForm, UsernameField
 from django.core.exceptions import ValidationError
 
 from .models import User
+from .contact_validation import validate_contact
 
 
 class AccountPasswordResetForm(PasswordResetForm):
@@ -28,6 +29,9 @@ class RecoveryEmailForm(forms.Form):
     def __init__(self, user, *args, **kwargs):
         self.user = user
         super().__init__(*args, **kwargs)
+
+    def clean_email(self):
+        return validate_contact("email", self.cleaned_data["email"], self.user.pk)
 
     def clean_current_password(self):
         password = self.cleaned_data["current_password"]

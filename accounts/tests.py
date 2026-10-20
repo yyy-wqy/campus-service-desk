@@ -40,10 +40,11 @@ class RegistrationTests(TestCase):
         self.assertNotContains(response, 'value="admin"')
 
     def test_all_public_roles_register_with_server_controlled_status(self):
-        for role in ("student", "teacher", "maintenance"):
+        for index, role in enumerate(("student", "teacher", "maintenance")):
             with self.subTest(role=role):
+                phone = f"1380013800{index}"
                 response = self.client.post(reverse("accounts:register"), self.payload(
-                    username=role, role=role, approval_status="approved",
+                    username=role, role=role, phone=phone, approval_status="approved",
                     is_staff="true", is_superuser="true", approval_reason="forged",
                 ), follow=True)
                 self.assertRedirects(response, reverse("accounts:login"))
@@ -52,7 +53,7 @@ class RegistrationTests(TestCase):
                 expected = "approved" if role == "student" else "pending"
                 self.assertEqual(user.approval_status, expected)
                 self.assertEqual(user.real_name, "测试用户")
-                self.assertEqual(user.phone, "13800138000")
+                self.assertEqual(user.phone, phone)
                 self.assertTrue(user.check_password(PASSWORD))
                 self.assertNotEqual(user.password, PASSWORD)
                 self.assertFalse(user.is_staff)

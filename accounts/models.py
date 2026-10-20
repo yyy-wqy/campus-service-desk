@@ -1,5 +1,8 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
+from django.db.models.functions import Lower, Trim
+
+from .contact_validation import normalize_email, normalize_phone
 
 
 class User(AbstractUser):
@@ -30,3 +33,18 @@ class User(AbstractUser):
     class Meta:
         verbose_name = "用户"
         verbose_name_plural = "用户"
+        constraints = [
+            models.UniqueConstraint(
+                Trim("phone"), condition=~models.Q(phone=""),
+                name="accounts_unique_nonempty_phone",
+            ),
+            models.UniqueConstraint(
+                Lower(Trim("email")), condition=~models.Q(email=""),
+                name="accounts_unique_nonempty_email",
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        self.phone = normalize_phone(self.phone)
+        self.email = normalize_email(self.email)
+        return super().save(*args, **kwargs)
