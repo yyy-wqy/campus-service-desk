@@ -7,6 +7,7 @@ from django.contrib.auth.views import (
     PasswordResetConfirmView, PasswordResetDoneView, PasswordResetView,
 )
 from django.core.cache import cache
+from django.db import IntegrityError, transaction
 from django.http import HttpResponseRedirect
 from django.shortcuts import redirect, render
 from django.urls import reverse_lazy
@@ -16,6 +17,7 @@ from django.views.decorators.http import require_http_methods
 
 from .models import User
 from .recovery_forms import AccountPasswordResetForm, RecoveryEmailForm
+from .contact_validation import add_contact_conflict_errors
 
 
 class AccountPasswordResetView(PasswordResetView):
@@ -63,7 +65,13 @@ def recovery_email(request):
         initial={"email": request.user.email},
     )
     if request.method == "POST" and form.is_valid():
-        form.save()
-        messages.success(request, "找回邮箱已保存，请确认该邮箱可正常接收邮件。")
-        return redirect("accounts:recovery_email")
+        try:
+            with transaction.atomic():
+                form.save()
+        except IntegrityError:
+            if not add_contact_conflict_errors(form, request.user.pk):
+                raise
+        else:
+            messages.success(request, "找回邮箱已保存，请确认该邮箱可正常接收邮件。")
+            return redirect("accounts:recovery_email")
     return render(request, "registration/recovery_email.html", {"form": form})

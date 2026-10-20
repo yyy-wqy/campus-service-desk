@@ -3,6 +3,7 @@ from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.core.exceptions import ValidationError
 
 from .models import User
+from .contact_validation import validate_contact
 
 
 class RegistrationForm(UserCreationForm):
@@ -22,6 +23,12 @@ class RegistrationForm(UserCreationForm):
         model = User
         fields = ("role", "username", "real_name", "phone", "email")
         labels = {"username": "学号 / 工号 / 账号"}
+
+    def clean_phone(self):
+        return validate_contact("phone", self.cleaned_data["phone"])
+
+    def clean_email(self):
+        return validate_contact("email", self.cleaned_data["email"])
 
     def save(self, commit=True):
         user = super().save(commit=False)
