@@ -108,8 +108,10 @@ class PasswordRecoveryTests(TestCase):
         self.assertNotContains(done, self.user.username)
         self.assertNotContains(done, "/accounts/reset/")
 
-    def test_same_mailbox_does_not_reset_another_account(self):
-        other = User.objects.create_user(username="other_user", password=OLD_PASSWORD, email=self.user.email)
+    def test_another_account_cannot_use_the_target_mailbox_to_request_a_reset(self):
+        other = User.objects.create_user(username="other_user", password=OLD_PASSWORD, email="other@example.com")
+        self.request_reset(username=other.username)
+        self.assertEqual(len(mail.outbox), 0)
         self.request_reset()
         self.assertEqual(len(mail.outbox), 1)
         self.assertIn(self.user.username, mail.outbox[0].body)
