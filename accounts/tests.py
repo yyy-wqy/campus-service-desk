@@ -1,3 +1,5 @@
+from html.parser import HTMLParser
+
 from django.contrib.auth import SESSION_KEY
 from django.http import HttpResponse
 from django.test import Client, TestCase, override_settings
@@ -205,6 +207,112 @@ class LoginTests(TestCase):
             "csrfmiddlewaretoken": client.cookies["csrftoken"].value,
         })
         self.assertEqual(response.status_code, 302)
+
+
+class LoginFailureMessageTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(
+            username="login_failure_user", password=PASSWORD,
+            role="teacher", approval_status="approved",
+        )
+
+    def assert_login_failure(self, username, password, message=None, code=None):
+        response = self.client.post(reverse("accounts:login"), {
+            "username": username, "password": password,
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["form"].errors)
+        if message:
+            self.assertContains(response, message)
+        if code:
+            errors = response.context["form"].non_field_errors().as_data()
+            self.assertEqual([error.code for error in errors], [code])
+        self.assertNotIn(SESSION_KEY, self.client.session)
+
+        class InputParser(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.inputs = {}
+
+            def handle_starttag(self, tag, attrs):
+                attributes = dict(attrs)
+                if tag == "input" and "name" in attributes:
+                    self.inputs[attributes["name"]] = attributes
+
+        parser = InputParser()
+        parser.feed(response.content.decode())
+        self.assertEqual(parser.inputs["username"].get("value"), username)
+        self.assertEqual(parser.inputs["password"].get("value", ""), "")
+        return response
+
+    def test_nonexistent_account_has_specific_message(self):
+        response = self.assert_login_failure(
+            "does_not_exist", PASSWORD,
+            "账号不存在，请检查账号或先注册", "account_not_found",
+        )
+        self.assertNotContains(response, "密码错误，请重新输入")
+
+    def test_existing_account_with_wrong_password_has_specific_message(self):
+        response = self.assert_login_failure(
+            self.user.username, "incorrect-password",
+            "密码错误，请重新输入", "incorrect_password",
+        )
+        self.assertNotContains(response, "账号不存在，请检查账号或先注册")
+
+    def test_wrong_password_never_reveals_account_status_or_rejection_reason(self):
+        for active in (True, False):
+            for status in ("approved", "pending", "rejected", "invalid"):
+                with self.subTest(active=active, status=status):
+                    User.objects.filter(pk=self.user.pk).update(
+                        is_active=active, approval_status=status,
+                        approval_reason="审核专用说明：请核实身份资料",
+                    )
+                    response = self.assert_login_failure(
+                        self.user.username, "incorrect-password",
+                        "密码错误，请重新输入", "incorrect_password",
+                    )
+                    for hidden in ("账号待审核", "账号审核未通过", "账号状态异常", "审核专用说明"):
+                        self.assertNotContains(response, hidden)
+
+    def test_correct_password_checks_inactive_before_approval(self):
+        for status in ("approved", "pending", "rejected"):
+            with self.subTest(status=status):
+                User.objects.filter(pk=self.user.pk).update(
+                    is_active=False, approval_status=status, approval_reason="审核专用说明",
+                )
+                response = self.assert_login_failure(
+                    self.user.username, PASSWORD, code="inactive",
+                )
+                for hidden in ("密码错误，请重新输入", "账号待审核", "账号审核未通过", "审核专用说明"):
+                    self.assertNotContains(response, hidden)
+
+    def test_other_status_failures_preserve_username_and_clear_password(self):
+        cases = (
+            {"approval_status": "pending"},
+            {"approval_status": "rejected", "approval_reason": "请核实身份资料"},
+            {"approval_status": "invalid"},
+            {"role": "invalid"},
+        )
+        for extra, code in zip(cases, ("pending", "rejected", "invalid_status", "invalid_role")):
+            with self.subTest(code=code):
+                User.objects.filter(pk=self.user.pk).update(
+                    **{"approval_status": "approved", "role": "teacher", **extra}
+                )
+                self.assert_login_failure(self.user.username, PASSWORD, code=code)
+
+    def test_missing_credentials_still_show_required_field_errors(self):
+        for username, password in (("", PASSWORD), (self.user.username, ""), ("", "")):
+            with self.subTest(username=username, password_missing=not password):
+                response = self.assert_login_failure(username, password)
+                self.assertFalse(response.context["form"].non_field_errors())
+
+    def test_unusable_password_cannot_create_a_session(self):
+        self.user.set_unusable_password()
+        self.user.save(update_fields=["password"])
+        self.assert_login_failure(
+            self.user.username, PASSWORD, "密码错误，请重新输入", "incorrect_password",
+        )
 
 
 @override_settings(ROOT_URLCONF="accounts.tests")

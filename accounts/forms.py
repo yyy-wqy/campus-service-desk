@@ -31,6 +31,30 @@ class RegistrationForm(UserCreationForm):
 
 
 class AccountAuthenticationForm(AuthenticationForm):
+    error_messages = {
+        **AuthenticationForm.error_messages,
+        "account_not_found": "账号不存在，请检查账号或先注册",
+        "incorrect_password": "密码错误，请重新输入",
+    }
+
+    def get_invalid_login_error(self):
+        try:
+            user = User._default_manager.get_by_natural_key(self.cleaned_data["username"])
+        except User.DoesNotExist:
+            return ValidationError(
+                self.error_messages["account_not_found"], code="account_not_found"
+            )
+
+        # The default backend also rejects inactive accounts. Verify the password
+        # before showing their status, just as for pending/rejected accounts.
+        if not user.check_password(self.cleaned_data["password"]):
+            return ValidationError(
+                self.error_messages["incorrect_password"], code="incorrect_password"
+            )
+        if not user.is_active:
+            return ValidationError(self.error_messages["inactive"], code="inactive")
+        return super().get_invalid_login_error()
+
     def confirm_login_allowed(self, user):
         super().confirm_login_allowed(user)
         if user.role not in User.Role.values:
