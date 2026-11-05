@@ -22,6 +22,7 @@
     {% endif %}
 
     <p class="nav-group-label">账号</p>
+    <a class="nav-item" href="{% url 'accounts:recovery_email' %}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18v14H3V5Zm0 0 9 7 9-7"/></svg><span>找回邮箱</span></a>
     <a class="nav-item" href="/accounts/profile/"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm8 9a8 8 0 0 0-16 0"/></svg><span>个人信息</span></a>
   </nav>
   <div class="sidebar-footer"><span class="status-indicator" aria-hidden="true"></span><span>服务系统运行正常</span></div>

@@ -71,19 +71,19 @@ class RegistrationFormatTests(TestCase):
                 self.assert_rejected("username", username)
 
     def test_leading_zeros_are_stored_as_strings_for_every_role(self):
-        for role, username in (
+        for index, (role, username) in enumerate((
             ("student", "000000000001"),
             ("teacher", "teacher.01"),
             ("maintenance", "repair_01"),
-        ):
+        )):
             with self.subTest(role=role):
                 response = self.client.post(reverse("accounts:register"), self.payload(
-                    role=role, username=username, phone="00000000001",
+                    role=role, username=username, phone=f"0000000000{index}",
                 ))
                 self.assertRedirects(response, reverse("accounts:login"))
                 user = User.objects.get(username=username)
                 self.assertEqual(user.username, username)
-                self.assertEqual(user.phone, "00000000001")
+                self.assertEqual(user.phone, f"0000000000{index}")
                 self.assertTrue(user.check_password(PASSWORD))
                 self.assertEqual(user.role, role)
                 self.assertEqual(user.approval_status, "approved" if role == "student" else "pending")

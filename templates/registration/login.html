@@ -15,7 +15,7 @@
       <div class="field-error">{{ form.username.errors }}</div>
     </div>
     <div class="field-group">
-      <label for="id_password">密码</label>
+      <div class="field-label-row"><label for="id_password">密码</label><a href="{% url 'accounts:password_reset' %}">忘记密码？</a></div>
       <div class="field-control">
         <input id="id_password" name="password" type="password" autocomplete="current-password" placeholder="请输入密码" required>
         <button class="password-toggle" type="button" data-password-toggle aria-label="显示密码"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Zm10 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/></svg></button>
