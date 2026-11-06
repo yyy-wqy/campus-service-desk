@@ -1,0 +1,5 @@
+<h2>审核历史</h2>
+{% for record in history %}
+<section class="message"><p>第{{ record.version }}轮 · {{ record.created_at|date:'Y-m-d H:i:s' }} · {{ record.reviewer.username }} · {{ record.get_result_display }}</p><p>{{ record.reason|default:'无补充说明' }}</p>
+{% for item in record.materials.all %}<p><a href="{% url 'accounts:material_download' item.pk %}">{{ item.get_category_display }}：{{ item.name|default:item.original_name }}</a> · {{ item.direction }}</p>{% endfor %}</section>
+{% empty %}<p>暂无审核记录。</p>{% endfor %}
