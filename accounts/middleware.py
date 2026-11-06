@@ -27,6 +27,14 @@ class BusinessAccessMiddleware(MiddlewareMixin):
             if match.namespace in {"accounts", "tickets", "locations", "chat"}:
                 return redirect_to_login(request.get_full_path())
             return None
+        if user.role == User.Role.MAINTENANCE and not user.can_handle_maintenance:
+            if match.view_name in {
+                "accounts:profile", "accounts:recovery_email", "accounts:qualifications",
+                "accounts:qualification_upload", "accounts:qualification_submit",
+                "accounts:material_retire", "accounts:material_download",
+            }:
+                return None
+            return render(request, "registration/access_denied.html", status=403)
         if user.role not in User.Role.values or user.approval_status != User.ApprovalStatus.APPROVED:
             return render(request, "registration/access_denied.html", status=403)
         return None

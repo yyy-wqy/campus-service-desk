@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}维修资质审核 | 校园智办{% endblock %}
+{% block content %}
+<div class="qualification-page">
+<h1>维修资质审核</h1>
+{% if application %}
+<p>{{ application.worker.username }} · {{ application.worker.real_name }} · 单位编号：{{ application.worker.organization_number|default:'未填写' }} · {{ application.get_status_display }} · {% if application.worker.is_active %}启用{% else %}已停用{% endif %}</p>
+{% include "accounts/material_list.html" %}
+{% if application.status == 'pending' and application.worker.is_active %}<form class="login-form" method="post">{% csrf_token %}{% include "registration/recovery_fields.html" %}<button type="submit" class="button button-primary">提交审核决定</button></form>{% endif %}
+{% include "accounts/material_history.html" %}
+<h2>正式停用与保留记录</h2><p>停用后材料至少保留180天；审核拒绝和临时登录限制不视为正式停用。</p>
+{% if application.worker.is_active %}<form class="login-form" method="post" action="{% url 'accounts:maintenance_deactivate' application.worker_id %}">{% csrf_token %}<div class="field-group"><label for="deactivation-reason">停用原因</label><div class="field-control"><input id="deactivation-reason" name="reason" required></div></div><button type="submit" class="button button-secondary">正式停用</button></form>{% endif %}
+{% for event in deactivations %}<p>{{ event.created_at|date:'Y-m-d H:i:s' }} · {{ event.actor.username }} · 正式停用：{{ event.reason }}</p>{% endfor %}
+{% for event in disposals %}<p>{{ event.created_at|date:'Y-m-d H:i:s' }} · {{ event.actor.username }} · 处置状态：{{ event.get_status_display }} · 依据：{{ event.policy_reference }} · 原因：{{ event.reason }} {{ event.failure_note }}</p>{% endfor %}
+<a href="{% url 'accounts:maintenance_reviews' %}">返回申请列表</a>
+{% else %}
+{% for item in applications %}<p><a href="{% url 'accounts:maintenance_review' item.pk %}">{{ item.worker.username }} · {{ item.worker.real_name }} · {{ item.get_status_display }}</a></p>{% empty %}<p>暂无维修申请。</p>{% endfor %}
+{% endif %}
+</div>
+{% endblock %}
