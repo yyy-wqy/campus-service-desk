@@ -29,7 +29,7 @@ class FormMarkup(HTMLParser):
 class RegistrationFormatTests(TestCase):
     def payload(self, **extra):
         return {
-            "role": "student", "username": "202610150001", "real_name": "测试用户",
+            "role": "student", "username": "202610150001", "real_name": "测试用户", "department": "测试部门",
             "phone": "13800138000", "password1": PASSWORD, "password2": PASSWORD,
             **extra,
         }
@@ -81,8 +81,8 @@ class RegistrationFormatTests(TestCase):
                     role=role, username=username, phone=f"0000000000{index}",
                 ))
                 self.assertRedirects(response, reverse("accounts:login"))
-                user = User.objects.get(username=username)
-                self.assertEqual(user.username, username)
+                user = User.objects.get(phone=f"0000000000{index}")
+                self.assertTrue(user.username.startswith("maint_")) if role == "maintenance" else self.assertEqual(user.username, username)
                 self.assertEqual(user.phone, f"0000000000{index}")
                 self.assertTrue(user.check_password(PASSWORD))
                 self.assertEqual(user.role, role)
@@ -98,8 +98,12 @@ class RegistrationFormatTests(TestCase):
                     form = RegistrationForm(data=self.payload(role=role, username=username))
                     self.assertTrue(form.is_valid(), form.errors)
             form = RegistrationForm(data=self.payload(role=role, username="bad account!"))
-            self.assertFalse(form.is_valid())
-            self.assertIn("username", form.errors)
+            if role == "teacher":
+                self.assertFalse(form.is_valid())
+                self.assertIn("username", form.errors)
+            else:
+                self.assertTrue(form.is_valid(), form.errors)
+                self.assertTrue(form.cleaned_data["username"].startswith("maint_"))
 
     def test_duplicate_student_number_is_still_rejected(self):
         User.objects.create_user(username="202610150001", password=PASSWORD)
@@ -126,9 +130,9 @@ class RegistrationFormatTests(TestCase):
         response = self.assert_rejected("phone", "invalid", role="maintenance")
         markup = FormMarkup(response.content.decode())
         self.assertEqual(markup.selected_role, "maintenance")
-        self.assertEqual(markup.inputs["username"]["value"], "202610150001")
+        self.assertTrue(markup.inputs["username"]["value"].startswith("maint_"))
         self.assertNotIn("pattern", markup.inputs["username"])
-        self.assertEqual(markup.inputs["username"]["maxlength"], "150")
+        self.assertEqual(markup.inputs["username"]["type"], "hidden")
 
     def test_page_provides_native_constraints_and_role_switch_script(self):
         response = self.client.get(reverse("accounts:register"))

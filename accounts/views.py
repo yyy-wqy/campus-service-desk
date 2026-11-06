@@ -7,9 +7,11 @@ from django.views.decorators.http import require_http_methods
 from .forms import AccountAuthenticationForm, RegistrationForm
 from .models import User
 from .contact_validation import add_contact_conflict_errors
+from .database_retry import retry_sqlite_lock
 
 
 @require_http_methods(["GET", "POST"])
+@retry_sqlite_lock
 def register(request):
     if request.user.is_authenticated:
         return redirect("core:home")
@@ -31,6 +33,8 @@ def register(request):
                 messages.success(request, "注册成功，请使用账号和密码登录。")
             else:
                 messages.success(request, "注册成功，账号待审核。管理员审核通过后即可登录。")
+            if user.role == User.Role.MAINTENANCE:
+                messages.success(request, f"你的维修登录账号是：{user.username}，请妥善保存。单位编号不是登录账号。")
             return redirect("accounts:login")
     return render(request, "registration/register.html", {"form": form})
 
