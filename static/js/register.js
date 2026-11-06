@@ -20,6 +20,15 @@
 
   const syncRole = () => {
     const student = role.value === "student";
+    const maintenance = role.value === "maintenance";
+    form.querySelector("[data-username-group]").hidden = maintenance;
+    form.querySelector("[data-maintenance-account-note]").hidden = !maintenance;
+    const department = form.querySelector('[name="department"]');
+    if (department) department.required = role.value === "teacher";
+    username.disabled = maintenance;
+    username.required = !maintenance;
+    username.type = maintenance ? "hidden" : "text";
+    if (!maintenance && username.value.startsWith("maint_")) username.value = "";
     username.setCustomValidity("");
     feedback(username).textContent = "";
     username.maxLength = student ? 12 : Number(username.dataset.accountMaxlength);
@@ -28,6 +37,10 @@
     usernameHelp.textContent = student
       ? "学号须为 12 位半角数字（0–9），前导零会保留。"
       : username.dataset.accountHelp;
+    if (maintenance) {
+      usernameLabel.textContent = "维修登录账号";
+      usernameHelp.textContent = "注册成功后由平台生成登录账号，请在成功提示中查看并保存。";
+    }
     if (student) {
       username.setAttribute("minlength", "12");
       username.setAttribute("pattern", "[0-9]{12}");

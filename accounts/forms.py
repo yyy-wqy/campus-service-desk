@@ -1,6 +1,9 @@
+import uuid
+
 from django import forms
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.core.exceptions import ValidationError
+from django.db import IntegrityError, transaction
 
 from .models import User
 from .contact_validation import validate_contact
@@ -15,6 +18,8 @@ class RegistrationForm(UserCreationForm):
         choices=[choice for choice in User.Role.choices if choice[0] != User.Role.ADMIN],
     )
     real_name = forms.CharField(label="姓名", max_length=50)
+    department = forms.CharField(label="院系/部门", max_length=100, required=False)
+    organization_number = forms.CharField(label="所属单位编号（选填）", max_length=100, required=False)
     email = forms.EmailField(
         label="找回邮箱（选填）", required=False, max_length=254,
         help_text="用于接收密码重置链接，请填写本人可访问的邮箱。",
@@ -36,7 +41,7 @@ class RegistrationForm(UserCreationForm):
 
     class Meta(UserCreationForm.Meta):
         model = User
-        fields = ("role", "username", "real_name", "phone", "email")
+        fields = ("role", "username", "real_name", "department", "organization_number", "phone", "email")
         labels = {"username": "学号 / 工号 / 账号"}
 
     def clean_phone(self):
@@ -77,6 +82,28 @@ class RegistrationForm(UserCreationForm):
             )
         else:
             account_field.widget.attrs.update(account_attrs)
+        if role == User.Role.TEACHER:
+            self.fields["department"].required = True
+            self.fields["username"].label = "工号"
+        if role == User.Role.MAINTENANCE:
+            account_field.required = False
+            account_field.disabled = True
+            account_field.initial = "maint_" + uuid.uuid4().hex
+            account_field.widget = forms.HiddenInput()
+            account_field.help_text = "维修登录账号将在注册成功后由平台分配。"
+
+    def clean_username(self):
+        username = self.cleaned_data.get("username", "")
+        if self.cleaned_data.get("role") != User.Role.MAINTENANCE and username.lower().startswith("maint_"):
+            raise ValidationError("此账号前缀由平台保留，请使用其他工号或账号。")
+        if self.cleaned_data.get("role") == User.Role.MAINTENANCE:
+            for attempt in range(10):
+                if not User.objects.filter(username__iexact=username).exists():
+                    self.cleaned_data["username"] = username
+                    return super().clean_username()
+                username = "maint_" + uuid.uuid4().hex
+            raise ValidationError("暂时无法生成账号，请重试。")
+        return super().clean_username()
 
     def save(self, commit=True):
         user = super().save(commit=False)
@@ -86,11 +113,25 @@ class RegistrationForm(UserCreationForm):
             else User.ApprovalStatus.PENDING
         )
         if commit:
-            user.save()
+            for attempt in range(5):
+                try:
+                    with transaction.atomic():
+                        user.save()
+                    break
+                except IntegrityError:
+                    if user.role != User.Role.MAINTENANCE or not User.objects.filter(username=user.username).exists():
+                        raise
+                    user.username = "maint_" + uuid.uuid4().hex
+            else:
+                raise IntegrityError("无法分配唯一维修账号，请重试。")
         return user
 
 
 class AccountAuthenticationForm(AuthenticationForm):
+    def clean(self):
+        from .login_protection import protected_clean
+        return protected_clean(self, super().clean)
+
     error_messages = {
         **AuthenticationForm.error_messages,
         "account_not_found": "账号不存在，请检查账号或先注册",

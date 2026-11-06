@@ -24,7 +24,7 @@ class RegistrationIntegrationTests(TestCase):
 
     def payload(self, **extra):
         return {
-            "username": "202611040001", "role": "student", "real_name": "组合测试",
+            "username": "202611040001", "role": "student", "real_name": "组合测试", "department": "测试部门",
             "phone": "00000000001", "email": "student@example.com",
             "password1": PASSWORD, "password2": PASSWORD, **extra,
         }

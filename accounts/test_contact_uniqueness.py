@@ -29,7 +29,7 @@ class UniqueContactTests(TestCase):
 
     def payload(self, **extra):
         return {
-            "username": "202610209999", "role": "student", "real_name": "新用户",
+            "username": "202610209999", "role": "student", "real_name": "新用户", "department": "测试部门",
             "phone": "13800138002", "email": "new@example.com",
             "password1": PASSWORD, "password2": PASSWORD, **extra,
         }
@@ -159,7 +159,8 @@ class ContactMigrationTests(TransactionTestCase):
 
     def tearDown(self):
         self.OldUser.objects.all().delete()
-        MigrationExecutor(connection).migrate(self.after)
+        executor = MigrationExecutor(connection)
+        executor.migrate(executor.loader.graph.leaf_nodes())
         super().tearDown()
 
     def test_migration_normalizes_existing_values_and_keeps_empty_contacts(self):
