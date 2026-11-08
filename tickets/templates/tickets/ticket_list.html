@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block title %}工单列表｜校园智办{% endblock %}
+
+{% block content %}
+  <section class="page-heading page-heading-row">
+    <div>
+      <p class="eyebrow">SERVICE TICKETS</p>
+      <h1>{% if user.role == 'maintenance' %}我的任务{% elif user.role == 'admin' %}工单管理{% else %}我的工单{% endif %}</h1>
+      <p>这里只显示当前账号有权查看的工单。</p>
+    </div>
+    {% if user.role == 'student' or user.role == 'teacher' %}<a class="button button-primary" href="{% url 'tickets:create' %}">提交报修</a>{% endif %}
+  </section>
+
+  <div class="ticket-list">
+    {% for ticket in tickets %}
+      <a class="ticket-row" href="{% url 'tickets:detail' ticket.pk %}">
+        <div><strong>{{ ticket.title }}</strong><span>{{ ticket.number }}</span></div>
+        <div><span>{{ ticket.building_name_snapshot }} · {{ ticket.location_detail }}</span><small>{{ ticket.created_at|date:'Y-m-d H:i' }}</small></div>
+        <span class="ticket-status">{{ ticket.get_status_display }}</span>
+      </a>
+    {% empty %}
+      <div class="empty-state"><h2>暂无工单</h2><p>当前账号还没有可查看的工单。</p></div>
+    {% endfor %}
+  </div>
+{% endblock %}
