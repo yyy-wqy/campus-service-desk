@@ -22,6 +22,8 @@ class User(AbstractUser):
     )
     real_name = models.CharField("姓名", max_length=50, blank=True)
     phone = models.CharField("联系方式", max_length=30, blank=True)
+    department = models.CharField("院系/部门", max_length=100, blank=True)
+    organization_number = models.CharField("所属单位编号", max_length=100, blank=True)
     approval_status = models.CharField(
         "审核状态",
         max_length=20,
@@ -48,3 +50,18 @@ class User(AbstractUser):
         self.phone = normalize_phone(self.phone)
         self.email = normalize_email(self.email)
         return super().save(*args, **kwargs)
+
+
+class TeacherReview(models.Model):
+    teacher = models.ForeignKey(User, on_delete=models.PROTECT, related_name="review_history")
+    reviewer = models.ForeignKey(User, on_delete=models.PROTECT, related_name="reviews_performed")
+    result = models.CharField(max_length=20, choices=User.ApprovalStatus.choices)
+    reason = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class LoginProtection(models.Model):
+    username = models.CharField(max_length=150, unique=True)
+    failures = models.PositiveIntegerField(default=0)
+    window_started_at = models.DateTimeField(null=True)
+    locked_until = models.DateTimeField(null=True)

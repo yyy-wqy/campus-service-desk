@@ -261,6 +261,8 @@ svg { display: block; }
 .field-control input::placeholder { color: #9aadaa; }
 .field-control select { width: 100%; min-width: 0; min-height: 48px; padding: 0 11px; color: var(--ink-950); background: transparent; border: 0; font-size: 14px; }
 .field-control select:focus-visible { outline: 2px solid #55b795; outline-offset: 2px; }
+.field-control:has(> #id_role):focus-within { border-color: var(--border); box-shadow: none; }
+#id_role:focus:not(:focus-visible) { outline: none; box-shadow: none; }
 .field-help { margin-top: 7px; color: var(--ink-600); font-size: 12px; line-height: 1.6; }
 .field-help ul { margin: 0; padding-left: 18px; }
 .password-toggle { display: grid; width: 34px; height: 34px; flex: 0 0 auto; padding: 0; color: var(--ink-500); background: transparent; border: 0; border-radius: 8px; cursor: pointer; place-items: center; }

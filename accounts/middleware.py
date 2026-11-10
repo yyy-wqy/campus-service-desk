@@ -1,4 +1,6 @@
+from django.contrib.auth import SESSION_KEY, logout
 from django.contrib.auth.views import redirect_to_login
+from django.http import HttpResponseForbidden
 from django.shortcuts import render
 from django.utils.deprecation import MiddlewareMixin
 
@@ -23,6 +25,16 @@ class BusinessAccessMiddleware(MiddlewareMixin):
         if match.namespace not in {"core", "accounts", "tickets", "locations", "chat", "admin"}:
             return None
         user = request.user
+        session_user_id = request.session.get(SESSION_KEY)
+        # ModelBackend returns AnonymousUser for inactive users even while the
+        # session still carries their account ID.
+        if (user.is_authenticated and not user.is_active) or (
+            not user.is_authenticated
+            and session_user_id is not None
+            and User.objects.filter(pk=session_user_id, is_active=False).exists()
+        ):
+            logout(request)
+            return HttpResponseForbidden("账号已停用，请联系管理员。")
         if not user.is_authenticated:
             if match.namespace in {"accounts", "tickets", "locations", "chat"}:
                 return redirect_to_login(request.get_full_path())

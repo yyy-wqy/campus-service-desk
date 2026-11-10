@@ -26,6 +26,7 @@ function page(initialRole = "student") {
     };
   }
   const role = input("role", initialRole);
+  const department = input("department");
   const username = input("username", "000000000001");
   const phone = input("phone", "00000000001");
   username.dataset = { accountMaxlength: "150", accountHelp: "原有账号规则" };
@@ -33,8 +34,13 @@ function page(initialRole = "student") {
   const help = { textContent: "" };
   const usernameError = { textContent: "" };
   const phoneError = { textContent: "" };
+  const usernameGroup = { hidden: false };
+  const maintenanceNote = { hidden: true };
   const selectors = {
+    "[data-username-group]": usernameGroup,
+    "[data-maintenance-account-note]": maintenanceNote,
     '[name="role"]': role,
+    '[name="department"]': department,
     '[name="username"]': username,
     '[name="phone"]': phone,
     'label[for="id_username"]': label,
@@ -48,7 +54,7 @@ function page(initialRole = "student") {
       getElementById: () => help,
     },
   });
-  return { role, username, phone, label, help, usernameError, phoneError };
+  return { role, department, username, phone, label, help, usernameError, phoneError, usernameGroup, maintenanceNote };
 }
 
 test("student inputs have exact digit constraints and keep leading zeros", () => {
@@ -69,7 +75,12 @@ test("teacher and maintenance accounts retain their usual limits", () => {
     assert.equal(username.attributes.pattern, undefined);
     assert.equal(username.attributes.minlength, undefined);
     assert.equal(username.attributes.inputmode, undefined);
-    assert.equal(help.textContent, "原有账号规则");
+    if (role === "teacher") assert.equal(help.textContent, "原有账号规则");
+    else {
+      assert.equal(username.disabled, true);
+      assert.equal(username.type, "hidden");
+      assert.match(help.textContent, /平台生成/);
+    }
   }
 });
 
@@ -105,4 +116,41 @@ test("phone validation shows a local error and clears it after correction", () =
   assert.equal(phone.validationMessage, "");
   assert.equal(phoneError.textContent, "");
   assert.equal(phone.value, "00000000001");
+});
+
+
+test("teacher department requirement toggles with role", () => {
+  const state = page("teacher");
+  assert.equal(state.department.required, true);
+  state.role.value = "student";
+  state.role.emit("change");
+  assert.equal(state.department.required, false);
+});
+
+test("maintenance credentials are not submitted and normal role restores input", () => {
+  const state = page("maintenance");
+  assert.equal(state.username.disabled, true);
+  assert.equal(state.username.required, false);
+  state.username.value = "maint_generated";
+  state.role.value = "teacher";
+  state.role.emit("change");
+  assert.equal(state.username.disabled, false);
+  assert.equal(state.username.required, true);
+  assert.equal(state.username.type, "text");
+  assert.equal(state.username.value, "");
+});
+
+
+test("maintenance hides the complete account group and shows only a note", () => {
+  const state = page("student");
+  assert.equal(state.usernameGroup.hidden, false);
+  assert.equal(state.maintenanceNote.hidden, true);
+  state.role.value = "maintenance";
+  state.role.emit("change");
+  assert.equal(state.usernameGroup.hidden, true);
+  assert.equal(state.maintenanceNote.hidden, false);
+  state.role.value = "teacher";
+  state.role.emit("change");
+  assert.equal(state.usernameGroup.hidden, false);
+  assert.equal(state.maintenanceNote.hidden, true);
 });
