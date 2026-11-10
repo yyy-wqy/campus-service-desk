@@ -1,197 +1,100 @@
 # 校园智办
 
-校园事务报修与服务工单管理平台，支持报修提交、工单分派、维修进度跟踪、双方确认完成和服务评价。
+校园智办是一个面向校园设施报修的服务工单平台。学生和教师提交问题，管理员受理并分派，维修人员记录处理过程，最后由报修人确认结果。项目希望让报修从“发出消息等回复”变成有责任人、有进度、可追溯的服务流程。
 
-当前仓库处于第一版基础项目阶段，使用 Python 3.12、Django 5.2 和 SQLite。项目由小组独立开发，第一版以宿舍和教学楼设施报修为核心。
+第一版聚焦**宿舍楼与教学楼设施报修**，采用 Django 开发。项目仍在迭代，功能交付情况请查看 [Issues](https://github.com/yyy-wqy/campus-service-desk/issues) 和 [Pull Requests](https://github.com/yyy-wqy/campus-service-desk/pulls)。
 
-## 开发环境
+## 功能概览
 
-- Python 3.12
-- Django 5.2.18
-- SQLite（Python 自带，无需单独安装）
+以下是项目第一版的功能范围，具体交付进度见 GitHub Issues。
 
-## 首次运行
+| 模块 | 功能 |
+| --- | --- |
+| 账号与身份 | 学生、教师、维修人员注册；账号密码登录；个人资料、密码找回；管理员审核教师及维修人员身份与资质。登录时无需选择角色。 |
+| 地点与分类 | 维护宿舍楼、教学楼、公共区域和故障类别；根据角色、住宿信息及地点限制可提交的报修范围。 |
+| 报修工单 | 填写地点、故障描述等信息；生成工单编号；查看本人或负责的工单、进度和历史。 |
+| 受理与维修 | 管理员受理、设置优先级和分派；维修人员更新进度并提交结果；报修人确认解决或退回继续处理。 |
+| 协作与反馈 | 取消申请、工单转派、现场照片、工单内文字沟通、服务评价与站内通知。 |
+| 管理与统计 | 用户审核、基础资料管理、工单管理，以及按状态、地点和类别查看统计概览。 |
 
-以下命令在 PowerShell 中执行。
+核心流程：
+
+```text
+提交报修 → 管理员受理与分派 → 维修人员处理 → 报修人确认 → 工单完成
+                                  ↑             │
+                                  └── 未解决 ────┘
+```
+
+工单的关键变化会记录在历史中。维修人员提交结果后，只有报修人确认解决，工单才算完成。
+
+## 用户角色
+
+| 角色 | 主要操作 | 工单可见范围 |
+| --- | --- | --- |
+| 学生 | 提交本人宿舍及教学楼的普通设施报修，查看进度并确认结果 | 本人提交的工单 |
+| 教师 | 提交教学楼普通设施和教师专用设备报修，查看进度并确认结果 | 本人提交的工单 |
+| 维修人员 | 查看分派任务、更新进度、提交维修结果 | 当前分派给自己的工单 |
+| 管理员 | 审核身份、维护基础资料、受理和分派工单、管理取消申请 | 全部工单 |
+
+学生、教师和维修人员在注册时选择身份；管理员账号由项目维护者创建。业务权限由服务端依据真实账号角色及工单归属判断。
+
+## 技术栈
+
+- 后端：Python 3.12、Django 5.2
+- 页面：Django Templates、CSS、原生 JavaScript
+- 数据库：SQLite（本地开发）
+- 测试：Django 测试框架、Node.js 内置测试运行器
+
+## 快速开始
+
+需要 Python 3.12。以下命令以 Windows PowerShell 为例：
 
 ```powershell
 git clone https://github.com/yyy-wqy/campus-service-desk.git
-Set-Location -LiteralPath '.\campus-service-desk'
+cd campus-service-desk
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
 python manage.py migrate
-python manage.py check
 python manage.py runserver
 ```
 
-浏览器打开 <http://127.0.0.1:8000/>。终端显示服务器正在运行即表示基础环境安装成功；按 `Ctrl+C` 停止服务。
+打开 <http://127.0.0.1:8000/>。如果 PowerShell 不允许激活虚拟环境，可将后续命令中的 `python` 换成 `.\.venv\Scripts\python.exe`。
 
-如果 PowerShell 禁止激活脚本，可以不激活虚拟环境，直接执行：
+macOS / Linux 使用 `source .venv/bin/activate` 激活虚拟环境，其余命令相同。
 
-```powershell
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\.venv\Scripts\python.exe manage.py migrate
-.\.venv\Scripts\python.exe manage.py runserver
-```
+项目从环境变量读取配置；[.env.example](.env.example) 列出了可配置项，但不会自动加载 `.env`。本地可使用默认开发配置；对外部署前必须设置独立密钥、关闭调试模式，并配置数据库、邮件及附件存储。
 
-## 本地配置
-
-`.env.example` 列出了可配置项，但项目不会自动读取 `.env` 文件。开发时可在启动服务前通过 PowerShell 设置环境变量：
-
-```powershell
-$env:DJANGO_SECRET_KEY = "仅用于你本机的随机密钥"
-$env:DJANGO_DEBUG = "True"
-$env:DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost"
-```
-
-未设置时，项目使用仅限本地开发的默认值。部署时必须设置真实的 `DJANGO_SECRET_KEY`，并将 `DJANGO_DEBUG` 设为 `False`。不要提交 `.env`、真实密码或密钥。
-
-## 常用命令
-
-```powershell
-# 检查项目配置
-python manage.py check
-
-# 模型变化后生成迁移文件
-python manage.py makemigrations
-
-# 创建或更新本地数据表
-python manage.py migrate
-
-# 启动开发服务器
-python manage.py runserver
-```
-
-迁移文件需要提交到 GitHub，`db.sqlite3` 和 `.venv` 只保留在个人电脑中。
-
-## 当前项目结构
+## 项目结构
 
 ```text
-campus-service-desk/
-├── accounts/           # 用户模型及后续账号功能
-├── chat/               # 工单内实时文字沟通
-├── config/             # Django 项目配置
-├── core/               # 首页及公共页面
-├── docs/               # 需求与设计文档
-├── locations/          # 校园地点、楼栋及设施分类
-├── static/             # 公共 CSS、JavaScript 和图片资源
-├── templates/          # 公共页面模板
-├── tickets/            # 报修工单、分派、状态及评价
-├── .env.example        # 本地配置示例
-├── .gitignore          # 不上传的本地文件规则
-├── manage.py           # Django 管理命令入口
-├── requirements.txt    # 固定的 Python 依赖版本
-└── README.md            # 安装、运行与协作说明
+accounts/    账号、认证与身份审核
+locations/   楼栋、地点与故障类别
+tickets/     报修工单、权限与处理流程
+chat/        工单内沟通
+core/        首页与公共页面
+config/      Django 项目配置
+templates/   页面模板
+static/      CSS 与 JavaScript
+docs/        需求与设计文档
 ```
 
-## 已完成的基础内容
-
-- Django 项目骨架和 SQLite 数据库配置
-- 自定义用户模型：学生、教师、维修人员和管理员
-- 教师、维修人员的审核状态字段
-- 中文界面语言与中国时区
-- 用户模型初始迁移文件
-- 账号、地点、工单、沟通和公共页面模块骨架
-- 各业务模块的独立路由入口
-- 公共模板和静态资源目录
-
-已接入账号注册、登录、退出及角色与审核状态校验；个人信息、报修工单以及管理员分派等业务功能仍待实现。
-
-## 账号功能（Issue #4）
-
-- 注册入口：`/accounts/register/`，仅提供学生、教师、维修人员三种身份，填写账号、姓名、联系方式和两次密码。
-- 注册格式校验（Issue #10）：所有角色手机号必须为 11 位半角数字，学生账号作为学号必须为 12 位半角数字，教师和维修人员账号沿用原有规则。前后端均校验格式，不接受空格或全角数字；以字符串存储以保留前导零。失败后保留非密码信息。
-- 学生注册后为已通过；教师和维修人员注册后为待审核。审核状态及管理员权限由服务端控制，不能通过提交表单修改。
-- 登录入口：`/accounts/login/`，仅输入账号和密码。验证成功后系统从数据库读取账号角色，登录请求中的角色参数不会改变身份或权限。待审核账号不能登录，审核未通过时显示审核说明。原 `/ui/login/` 地址跳转到正式登录页。
-- 登录失败提示（Issue #11）：不存在的账号显示“账号不存在，请检查账号或先注册”；账号存在但密码错误时显示“密码错误，请重新输入”。账号密码正确后才判断账号停用、角色及审核状态。失败后保留账号输入、清空密码，不建立登录会话。
-- 登录成功后进入首页。顶部“退出登录”使用带 CSRF 校验的 POST 请求结束会话。
-- 业务访问由 `accounts.middleware.BusinessAccessMiddleware` 统一校验，包括已登录账号审核状态发生变化的情况。账号模块除注册、登录、退出外的页面也受此校验；后续业务视图仍需按各自要求校验角色和数据归属。
-- 更新后需运行 `python manage.py migrate`，应用手机号和邮箱唯一性约束；存量冲突处理见下文。自动测试使用独立测试数据库，不会创建本地演示账号。
-
-管理员由维护者预置，不能通过注册页面创建。若使用 Django 的 `createsuperuser` 命令，需再在 `python manage.py shell` 中显式设置该账号的平台角色和审核状态（将示例账号名替换为实际账号）：
-
-```python
-from accounts.models import User
-User.objects.filter(username="实际管理员账号").update(
-    role=User.Role.ADMIN, approval_status=User.ApprovalStatus.APPROVED
-)
-```
-
-审核管理页面由后续任务实现；本地验收可在 Django shell 中将教师或维修人员的 `approval_status` 更新为 `approved` 或 `rejected`，并按需填写 `approval_reason`，再验证登录提示。
-
-## 手机号与邮箱去重
-
-注册时手机号不可被其他账号使用；非空找回邮箱忽略大小写并去除前后空白后判重。重复错误显示在对应字段附近，不创建账号，并保留非密码输入。邮箱仍为选填，多账号不填写邮箱不受限制。已有用户更换找回邮箱时也不能占用其他账号的邮箱，保留自己的邮箱则允许。
-
-数据库增加非空手机号与非空邮箱的唯一索引，阻止并发提交绕过表单检查；保存账号时将手机号去除首尾空白、邮箱去除首尾空白并转小写。普通注册及邮箱绑定遇到竞争冲突会重新检查并显示字段错误。
-
-更新代码后需运行 `python manage.py migrate`。迁移先检查并规范存量联系人；如果规范后出现重复，会列出冲突账号 ID 并停止，不会自动删除账号或清空联系人。维护者核实并修正冲突后再运行迁移即可。邮箱大小写和首尾空白的规范化在回退迁移时不会恢复原样。
-
-本功能测试：`python manage.py test accounts.test_contact_uniqueness`，包含数据库约束、注册与绑定竞争冲突，以及存量迁移的验证。
-
-## 忘记密码与本地控制台邮件（Issue #14）
-
-注册时可选填找回邮箱；已有用户登录后点击账号导航中的“找回邮箱”，输入当前密码确认绑定或更换。邮箱找回复用用户模型已有 `email` 字段；本 PR 同时包含联系人唯一性迁移，更新后必须执行 `python manage.py migrate`。未绑定邮箱且已经忘记密码的用户，需要联系维护者核验身份后处理。
-
-登录页“忘记密码”入口为 `/accounts/password-reset/`，填写账号和绑定邮箱。匹配且账号启用、有可用密码时生成重置邮件，链接有效期 1 小时，使用成功即失效；重置后需重新登录，原会话随密码变更失效。账号角色和审核状态不改变，未审核通过的账号重置后仍不能登录业务页面。
-
-本地 `DEBUG=True` 默认使用控制台邮件后端，**不向真实邮箱发信，也不产生邮件服务费用**。显式配置与运行方式：
-
-```powershell
-$env:DJANGO_EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
-.\.venv\Scripts\python.exe manage.py runserver
-```
-
-本地验收步骤：
-
-1. 注册账号并填写找回邮箱（可使用 `student@example.com` 这样的测试地址），或用现有账号登录后绑定。
-2. 退出登录，在“忘记密码”页填写相同账号和邮箱。
-3. 从运行 `runserver` 的终端中复制 `http://127.0.0.1:8000/accounts/reset/...` 链接，在浏览器打开。
-4. 输入两次符合强度要求的新密码，返回登录页验证新密码可用、旧密码不可用。
-5. 再次打开已用链接应显示失效。连续申请同一账号需间隔至少 60 秒。
-
-若由后台进程启动本地服务，邮件内容会进入该进程的输出日志；本地助手启动的日志位于 `.venv/server.stdout.log`。控制台邮件包含有效重置链接，仅供开发者查看，不应暴露为公开日志；测试完可关闭服务。
-
-自动测试：`python manage.py test accounts.test_password_recovery`。使用测试邮箱后端和控制台捕获验证，不向外发信，也不创建本地演示账号。
-
-后续真实发信才需要 SMTP 配置，环境变量示例见 `.env.example`。配置 `DJANGO_EMAIL_BACKEND`、`DJANGO_DEFAULT_FROM_EMAIL`、`DJANGO_EMAIL_HOST`、`DJANGO_EMAIL_PORT`、`DJANGO_EMAIL_HOST_USER`、`DJANGO_EMAIL_HOST_PASSWORD` 和对应加密方式；SSL 与 STARTTLS 二选一。当前 `.env` 不会自动读取，配置需要设置到进程环境中。生产部署还需设置真实 `SECRET_KEY`、明确的 `ALLOWED_HOSTS` 和 HTTPS 可访问地址，不能使用控制台日志作为用户收信方式。
-
-重置申请对未知账号、邮箱不匹配、停用账号等均返回相同受理提示，不在页面返回链接；限频使用 Django cache，每账号 60 秒一次。本地默认缓存仅适用于当前服务进程，生产多进程部署需配置共享缓存。
-
-## 协作约定
-
-每项工作从最新的 `main` 创建任务分支，通过 Pull Request 审核后合并。不要直接向 `main` 推送未检查的功能代码。
-
-提交前至少运行：
+## 测试
 
 ```powershell
 python manage.py check
-python manage.py makemigrations --check --dry-run
-python manage.py test
-```
-
-注册页角色切换与校验提示的 JavaScript 测试使用 Node.js 内置测试运行器，无需额外 npm 依赖：
-
-```powershell
+python manage.py test --noinput
 node --test tests/js/register.test.cjs
 ```
 
-项目第一版的完整业务范围和验收要求见 `docs/校园智办_第一版需求与产品设计_V1.0.docx`。
+数据库结构更新后运行 `python manage.py migrate`。提交代码前可执行 `python manage.py makemigrations --check --dry-run` 检查是否遗漏迁移文件。
 
+## 开发与文档
 
-## 账号资料、教师审核与登录保护（Issue #17）
+项目按照 P0 核心报修闭环、P1 协作与体验增强推进。每项任务通过 Issue 描述范围和验收标准，在独立分支开发并通过 Pull Request 审核。
 
-已确认实施规则：本人可修改姓名、手机号、院系/部门；维修人员另可修改所属单位编号。资料入口 `/accounts/profile/` 只操作当前登录账号，登录账号、角色、审核状态不在可修改字段中；找回邮箱仍通过独立入口验证当前密码后修改。手机号格式及唯一性约束继续有效。
+- [查看任务与开发进度](https://github.com/yyy-wqy/campus-service-desk/issues)
+- [查看迭代里程碑](https://github.com/yyy-wqy/campus-service-desk/milestones)
+- [第一版需求与产品设计](docs/校园智办_第一版需求与产品设计_V1.0.docx)
 
-教师注册必须填写姓名、工号、院系/部门及手机号，无需证明附件。维修登录账号使用平台保留的 `maint_` 前缀及随机编号，注册成功后在提示中告知；单位编号独立、可选且不作为凭证。数据库全局唯一约束及冲突重试保障并发分配；已有账号不改名。
-
-管理员通过 `/accounts/reviews/` 查看教师并通过或拒绝，拒绝原因必填。每次决定追加记录审核人、时间、结果、说明；不覆盖旧记录。资料不足可线下核验，旧教师的空部门字段在编辑时需要补齐。
-
-登录采用用户确认的固定窗口：首次凭证登录失败开始计时，15 分钟内第 5 次失败立即锁定 15 分钟；窗口起点或锁定结束恰满 15 分钟时重置计数。锁定期间正确密码仍不能登录，重复请求不延长锁定。成功登录清零，不同账号分别记录。完整账号和密码提交才计为登录尝试；待审核、停用等拒绝也计入失败。应用登录及 Django 管理登录均受保护，直接认证后端也检查锁定状态。
-
-状态存入数据库，更新先取得数据库写锁，防止并发丢失计数；SQLite 锁竞争作有限重试，不能以失败计数竞争绕过。原有会话在账号停用或审核状态变化后仍由业务中间件重新检查。
-
-仅已存在的账号写入登录保护表。未知账号的完整凭证提交按服务端看到的来源地址使用缓存计数，15 分钟内第 31 次起提示稍后重试。多进程部署需配置共享缓存以统一限频计数。停用已有会话的账号后，下一次访问受保护页面会返回 403 并清除会话。
-
-更新后执行 `python manage.py migrate`，新增部门和单位编号字段、教师审核历史及登录保护表，保留已有账号、联系方式和唯一约束。专项测试：`python manage.py test accounts.test_account_management`，包含资料白名单、审核权限与留痕、锁定边界、账号隔离及并发注册和计数验证。
+欢迎通过 Issue 提交问题或改进建议。
