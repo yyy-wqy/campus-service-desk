@@ -322,6 +322,13 @@ svg { display: block; }
   .back-link { margin-bottom: 38px; }
 }
 
+.qualification-page { max-width: 900px; overflow-wrap: anywhere; }
+.qualification-page h2 { margin-top: 32px; }
+.qualification-page > form { margin-bottom: 24px; }
+.qualification-page .field-control input[type="checkbox"] { width: 20px; height: 20px; margin: 12px 0; }
+.qualification-page .field-control input[type="file"] { height: auto; padding: 12px 0; }
+.qualification-page .field-control textarea { width: 100%; min-height: 120px; padding: 12px 0; color: var(--ink-950); border: 0; background: transparent; resize: vertical; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
 }
