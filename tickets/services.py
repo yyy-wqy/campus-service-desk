@@ -1,7 +1,7 @@
 import time
 
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.db import OperationalError, transaction
+from django.db import DatabaseError, OperationalError, transaction
 from django.db.models import F
 from django.utils import timezone
 
@@ -16,9 +16,15 @@ class TicketNumberExhausted(ValidationError):
     pass
 
 
+class TicketCreationFailed(ValidationError):
+    pass
+
+
 def validate_submission_scope(reporter, building, fault_category):
     require_create_permission(reporter)
     errors = {}
+    if not (reporter.phone or "").strip():
+        errors["reporter"] = "请先在个人资料中补齐手机号后再提交报修。"
     if not building.is_active:
         errors["building"] = "该楼栋已停用，请重新选择。"
     if not fault_category.is_active:
@@ -88,14 +94,21 @@ def _create_ticket_once(
         )
         ticket.full_clean()
         ticket.save()
-        TicketHistory.objects.create(
-            ticket=ticket,
-            event_type=TicketHistory.EventType.CREATED,
-            actor=reporter,
-            to_status=Ticket.Status.PENDING_ACCEPTANCE,
-            description="报修人提交工单，等待管理员受理。",
-            metadata={"number": ticket.number},
-        )
+        try:
+            TicketHistory.objects.create(
+                ticket=ticket,
+                event_type=TicketHistory.EventType.CREATED,
+                actor=reporter,
+                to_status=Ticket.Status.PENDING_ACCEPTANCE,
+                description="报修人提交工单，等待管理员受理。",
+                metadata={"number": ticket.number},
+            )
+        except OperationalError:
+            raise
+        except Exception as exc:
+            raise TicketCreationFailed(
+                "工单暂时无法提交，请稍后重试。"
+            ) from exc
         return ticket
 
 
@@ -110,9 +123,19 @@ def create_ticket(**kwargs):
         try:
             return _create_ticket_once(**kwargs)
         except OperationalError as exc:
-            if "locked" not in str(exc).lower() or attempt == 4:
-                raise
+            if "locked" not in str(exc).lower():
+                raise TicketCreationFailed(
+                    "系统暂时繁忙，请稍后重试。"
+                ) from exc
+            if attempt == 4:
+                raise TicketCreationFailed(
+                    "系统暂时繁忙，请稍后重试。"
+                ) from exc
             time.sleep(0.02 * (attempt + 1))
+        except DatabaseError as exc:
+            raise TicketCreationFailed(
+                "工单暂时无法提交，请稍后重试。"
+            ) from exc
     raise RuntimeError("unreachable")
 
 

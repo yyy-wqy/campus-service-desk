@@ -2,6 +2,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from unittest.mock import patch
 
+from django.contrib.auth.models import Permission
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import close_old_connections
@@ -17,7 +18,12 @@ from .permissions import (
     can_manage_ticket,
     can_process_ticket,
 )
-from .services import TicketNumberExhausted, create_ticket, transition_ticket
+from .services import (
+    TicketCreationFailed,
+    TicketNumberExhausted,
+    create_ticket,
+    transition_ticket,
+)
 
 
 class TicketFixtureMixin:
@@ -164,7 +170,7 @@ class TicketCreationServiceTests(TicketFixtureMixin, TestCase):
         business_date = date(2026, 11, 5)
         with patch("tickets.services.timezone.localdate", return_value=business_date):
             with patch.object(TicketHistory.objects, "create", side_effect=RuntimeError):
-                with self.assertRaises(RuntimeError):
+                with self.assertRaises(TicketCreationFailed):
                     self.create_valid_ticket()
 
         self.assertFalse(Ticket.objects.exists())
@@ -310,6 +316,45 @@ class TicketViewTests(TicketFixtureMixin, TestCase):
         self.assertFalse(TicketDailySequence.objects.exists())
         self.assertFalse(TicketHistory.objects.exists())
 
+    def test_missing_phone_shows_actionable_error_without_allocating_number(self):
+        user_model = get_user_model()
+        legacy_student = user_model.objects.create_user(
+            username="legacy-student",
+            password="test-password",
+            role="student",
+            approval_status="approved",
+            real_name="旧账号学生",
+            phone="",
+        )
+        self.client.force_login(legacy_student)
+
+        response = self.client.post(reverse("tickets:create"), self.valid_form_data())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "请先在个人资料中补齐手机号后再提交报修")
+        self.assertFalse(Ticket.objects.exists())
+        self.assertFalse(TicketHistory.objects.exists())
+        self.assertFalse(TicketDailySequence.objects.exists())
+
+    def test_history_write_failure_shows_retry_error_and_rolls_back_number(self):
+        self.client.force_login(self.student)
+        with patch.object(TicketHistory.objects, "create", side_effect=RuntimeError):
+            response = self.client.post(
+                reverse("tickets:create"),
+                self.valid_form_data(),
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "工单暂时无法提交，请稍后重试")
+        self.assertFalse(Ticket.objects.exists())
+        self.assertFalse(TicketHistory.objects.exists())
+        self.assertFalse(TicketDailySequence.objects.exists())
+
+        response = self.client.post(reverse("tickets:create"), self.valid_form_data())
+        ticket = Ticket.objects.get()
+        self.assertRedirects(response, reverse("tickets:detail", args=(ticket.pk,)))
+        self.assertTrue(ticket.number.endswith("0001"))
+
     def test_list_and_detail_only_show_visible_tickets(self):
         ticket = self.create_valid_ticket()
         other_student = get_user_model().objects.create_user(
@@ -346,6 +391,82 @@ class TicketViewTests(TicketFixtureMixin, TestCase):
         self.client.force_login(self.maintenance)
         response = self.client.get(reverse("tickets:create"))
         self.assertEqual(response.status_code, 403)
+
+
+class TicketAdminPermissionTests(TicketFixtureMixin, TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        user_model = get_user_model()
+        cls.other_student = user_model.objects.create_user(
+            username="other-admin-student",
+            password="test-password",
+            role="student",
+            approval_status="approved",
+            real_name="其他学生",
+            phone="13500135000",
+        )
+        for user in (cls.teacher, cls.admin):
+            user.is_staff = True
+            user.save(update_fields=("is_staff",))
+        permissions = Permission.objects.filter(
+            content_type__app_label="tickets",
+            codename__in=("view_ticket", "view_tickethistory"),
+        )
+        cls.teacher.user_permissions.add(*permissions)
+        cls.admin.user_permissions.add(*permissions)
+
+    def setUp(self):
+        self.own_ticket = self.create_valid_ticket(
+            reporter=self.teacher,
+            title="教师自己的工单",
+        )
+        self.other_ticket = self.create_valid_ticket(
+            reporter=self.other_student,
+            title="其他学生的工单",
+        )
+
+    def test_teacher_admin_list_only_contains_own_ticket_and_history(self):
+        self.client.force_login(self.teacher)
+
+        ticket_response = self.client.get(reverse("admin:tickets_ticket_changelist"))
+        history_response = self.client.get(
+            reverse("admin:tickets_tickethistory_changelist")
+        )
+
+        self.assertEqual(ticket_response.status_code, 200)
+        self.assertContains(ticket_response, self.own_ticket.number)
+        self.assertNotContains(ticket_response, self.other_ticket.number)
+        self.assertEqual(history_response.status_code, 200)
+        self.assertContains(history_response, self.own_ticket.number)
+        self.assertNotContains(history_response, self.other_ticket.number)
+
+    def test_teacher_cannot_open_other_users_ticket_or_history_directly(self):
+        self.client.force_login(self.teacher)
+        other_history = self.other_ticket.history.get()
+
+        ticket_response = self.client.get(
+            reverse("admin:tickets_ticket_change", args=(self.other_ticket.pk,))
+        )
+        history_response = self.client.get(
+            reverse("admin:tickets_tickethistory_change", args=(other_history.pk,))
+        )
+
+        self.assertNotEqual(ticket_response.status_code, 200)
+        self.assertNotEqual(history_response.status_code, 200)
+
+    def test_business_admin_can_view_all_tickets_and_history(self):
+        self.client.force_login(self.admin)
+
+        ticket_response = self.client.get(reverse("admin:tickets_ticket_changelist"))
+        history_response = self.client.get(
+            reverse("admin:tickets_tickethistory_changelist")
+        )
+
+        self.assertContains(ticket_response, self.own_ticket.number)
+        self.assertContains(ticket_response, self.other_ticket.number)
+        self.assertContains(history_response, self.own_ticket.number)
+        self.assertContains(history_response, self.other_ticket.number)
 
 
 class ConcurrentTicketNumberTests(TransactionTestCase):

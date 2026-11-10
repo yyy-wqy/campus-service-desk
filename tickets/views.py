@@ -23,7 +23,7 @@ def ticket_create(request):
         try:
             ticket = form.save()
         except ValidationError as exc:
-            form.add_error(None, exc)
+            form.add_service_error(exc)
         else:
             messages.success(request, f"报修提交成功，工单编号：{ticket.number}")
             return redirect("tickets:detail", pk=ticket.pk)

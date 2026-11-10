@@ -54,14 +54,19 @@ class TicketCreateForm(forms.Form):
             try:
                 validate_submission_scope(self.reporter, building, category)
             except ValidationError as exc:
-                if hasattr(exc, "error_dict"):
-                    for field, errors in exc.error_dict.items():
-                        target = field if field in self.fields else None
-                        for error in errors:
-                            self.add_error(target, error)
-                else:
-                    self.add_error(None, exc)
+                self.add_service_error(exc)
         return cleaned
+
+    def add_service_error(self, error):
+        """Map service validation fields without exposing internal model fields."""
+
+        if hasattr(error, "error_dict"):
+            for source_field, errors in error.error_dict.items():
+                target = source_field if source_field in self.fields else None
+                for item in errors:
+                    self.add_error(target, item)
+            return
+        self.add_error(None, error)
 
     def save(self):
         if not self.is_valid():
