@@ -4,8 +4,9 @@ from unittest.mock import patch
 import uuid
 
 from django.contrib.auth import SESSION_KEY, authenticate
+from django.core.cache import cache
 from django.db import close_old_connections
-from django.test import Client, TestCase, TransactionTestCase
+from django.test import Client, TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -111,6 +112,18 @@ class AccountManagementTests(TestCase):
         for url in (reverse("accounts:profile"), reverse("accounts:teacher_review", args=[teacher.pk])):
             self.assertEqual(client.post(url, {}).status_code, 403)
 
+    def test_deactivating_signed_in_account_denies_next_request_and_ends_session(self):
+        user = User.objects.create_user(username="signed-in", password=PASSWORD, approval_status="approved")
+        self.assertRedirects(self.client.post(reverse("accounts:login"), {"username": user.username, "password": PASSWORD}), reverse("core:home"))
+        self.assertIn(SESSION_KEY, self.client.session)
+
+        User.objects.filter(pk=user.pk).update(is_active=False)
+        response = self.client.get(reverse("accounts:profile"))
+        self.assertContains(response, "账号已停用", status_code=403)
+        self.assertNotIn(SESSION_KEY, self.client.session)
+        User.objects.filter(pk=user.pk).update(is_active=True)
+        self.assertRedirects(self.client.get(reverse("accounts:profile")), f'{reverse("accounts:login")}?next={reverse("accounts:profile")}')
+
 
 class LoginProtectionTests(TestCase):
     def setUp(self):
@@ -161,6 +174,25 @@ class LoginProtectionTests(TestCase):
         with patch("accounts.login_protection.timezone.now", return_value=start + timedelta(seconds=902)):
             self.assertNotEqual(self.attempt()[1].non_field_errors().as_data()[0].code, "locked")
             self.assertEqual(LoginProtection.objects.get(username="protected").failures, 2)
+
+    @override_settings(CACHES={"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache", "LOCATION": "test-unknown-login-throttle"}})
+    def test_unknown_account_attempts_are_rate_limited_by_address_without_database_rows(self):
+        cache.clear()
+        self.addCleanup(cache.clear)
+        url = reverse("accounts:login")
+        address = "192.0.2.1"
+        with patch("accounts.login_protection.UNKNOWN_ATTEMPT_LIMIT", 2):
+            for index in range(2):
+                response = self.client.post(url, {"username": f"missing-{index}", "password": "wrong"}, REMOTE_ADDR=address)
+                self.assertContains(response, "账号不存在")
+            response = self.client.post(url, {"username": "another-missing", "password": "wrong"}, REMOTE_ADDR=address, HTTP_X_FORWARDED_FOR="192.0.2.2")
+            self.assertContains(response, "登录尝试过多")
+            response = self.client.post(url, {"username": "another-missing", "password": "wrong"}, REMOTE_ADDR="192.0.2.2")
+            self.assertContains(response, "账号不存在")
+            self.assertFalse(LoginProtection.objects.exists())
+            response = self.client.post(url, {"username": self.user.username, "password": "wrong"}, REMOTE_ADDR=address)
+            self.assertContains(response, "密码错误")
+            self.assertEqual(LoginProtection.objects.get(username=self.user.username).failures, 1)
 
 
 class AccountConcurrencyTests(TransactionTestCase):

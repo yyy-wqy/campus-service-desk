@@ -2,15 +2,18 @@ from datetime import timedelta
 import time
 import threading
 
+from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.db import OperationalError, transaction
 from django.db.models import F
 from django.utils import timezone
 
-from .models import LoginProtection
+from .models import LoginProtection, User
 
 
 LOCK_MESSAGE = "连续登录失败过多，账号已锁定，请15分钟后重试。"
+UNKNOWN_ATTEMPT_LIMIT = 30
+UNKNOWN_WINDOW_SECONDS = 15 * 60
 _locks = [threading.RLock() for _ in range(64)]
 
 
@@ -32,6 +35,9 @@ def _retry_clean(form, authenticate_clean):
 def _protected_clean(form, authenticate_clean):
     username = form.cleaned_data.get("username")
     if not username or not form.cleaned_data.get("password"):
+        return authenticate_clean()
+    if not User.objects.filter(username=username).exists():
+        _throttle_unknown_account(form.request)
         return authenticate_clean()
     state, _ = LoginProtection.objects.get_or_create(username=username)
     error = None
@@ -67,3 +73,22 @@ def _protected_clean(form, authenticate_clean):
     if error:
         raise error
     return result
+
+
+def _throttle_unknown_account(request):
+    # Key by the server-provided address, never by a submitted username or
+    # an untrusted forwarding header.
+    address = request.META.get("REMOTE_ADDR") if request else None
+    if not address:
+        return
+    key = f"unknown-login:{address}"
+    if cache.add(key, 1, timeout=UNKNOWN_WINDOW_SECONDS):
+        return
+    try:
+        attempts = cache.incr(key)
+    except ValueError:
+        # The bucket may expire or be evicted between add and incr.
+        cache.add(key, 1, timeout=UNKNOWN_WINDOW_SECONDS)
+        return
+    if attempts > UNKNOWN_ATTEMPT_LIMIT:
+        raise ValidationError("登录尝试过多，请稍后再试。", code="unknown_login_throttled")
