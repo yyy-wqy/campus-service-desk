@@ -1,6 +1,6 @@
-﻿from django.contrib import messages
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods
@@ -8,17 +8,25 @@ from django.views.decorators.http import require_http_methods
 from accounts.models import User
 
 from .forms import (
+    AdminHousingForm,
     BuildingForm,
     FaultCategoryForm,
     HousingForm,
     PublicAreaOptionForm,
 )
 from .housing import (
-    HousingChangeTooSoon,
     change_own_building,
+    get_housing,
     next_allowed_change,
+    set_building_by_admin,
 )
-from .models import Building, FaultCategory, PublicAreaOption
+from .models import (
+    Building,
+    FaultCategory,
+    HousingChangeLog,
+    PublicAreaOption,
+    StudentHousing,
+)
 
 
 def _require_admin(request):
@@ -34,7 +42,18 @@ def housing(request):
     if request.user.role != User.Role.STUDENT:
         raise PermissionDenied
 
-    current = getattr(request.user, "housing", None)
+    try:
+        current = get_housing(request.user)
+        history = list(
+            request.user.housing_changes.select_related(
+                "actor", "from_building", "to_building"
+            ).order_by("-created_at", "-pk")
+        )
+    except ValidationError as exc:
+        # 并发写锁读取失败：给可读提示，不返回 500。
+        messages.error(request, exc.messages[0])
+        current, history = None, []
+
     form = HousingForm(
         request.POST if request.method == "POST" else None,
         initial={"building": current.building_id} if current else None,
@@ -42,8 +61,9 @@ def housing(request):
     if request.method == "POST" and form.is_valid():
         try:
             change_own_building(request.user, form.cleaned_data["building"])
-        except HousingChangeTooSoon as exc:
-            form.add_error(None, str(exc))
+        except ValidationError as exc:
+            # 换楼过于频繁、并发写锁竞争或楼栋状态变化，都落到表单提示。
+            form.add_error(None, exc.messages[0])
         else:
             messages.success(request, "住宿信息已更新。")
             return redirect("locations:housing")
@@ -55,9 +75,7 @@ def housing(request):
             "form": form,
             "housing": current,
             "next_allowed_at": next_allowed_change(current),
-            "history": request.user.housing_changes.select_related(
-                "actor", "from_building", "to_building"
-            ).order_by("-created_at", "-pk"),
+            "history": history,
         },
     )
 
@@ -75,6 +93,41 @@ def manage(request):
             "buildings": Building.objects.order_by("building_type", "name"),
             "categories": FaultCategory.objects.order_by("name"),
             "public_areas": PublicAreaOption.objects.order_by("sort_order", "name"),
+        },
+    )
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def manage_housing(request):
+    """管理员代学生修改住宿楼栋，并留下操作人、时间和前后值。"""
+
+    _require_admin(request)
+    form = AdminHousingForm(request.POST if request.method == "POST" else None)
+    if request.method == "POST" and form.is_valid():
+        try:
+            set_building_by_admin(
+                form.cleaned_data["student"],
+                form.cleaned_data["building"],
+                request.user,
+            )
+        except ValidationError as exc:
+            form.add_error(None, exc.messages[0])
+        else:
+            messages.success(request, "住宿楼栋已更新，并已记录操作人、时间和前后楼栋。")
+            return redirect("locations:manage_housing")
+
+    return render(
+        request,
+        "locations/manage_housing.html",
+        {
+            "form": form,
+            "assignments": StudentHousing.objects.select_related(
+                "student", "building"
+            ).order_by("student__username"),
+            "logs": HousingChangeLog.objects.select_related(
+                "student", "actor", "from_building", "to_building"
+            ).order_by("-created_at", "-pk")[:20],
         },
     )
 

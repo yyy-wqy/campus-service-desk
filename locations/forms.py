@@ -1,5 +1,7 @@
 from django import forms
 
+from accounts.models import User
+
 from .models import Building, FaultCategory, PublicAreaOption
 
 
@@ -91,3 +93,27 @@ class PublicAreaOptionForm(forms.ModelForm):
             if others.exists():
                 self.add_error("is_other", "只能有一个“其他”选项。")
         return data
+
+
+class AdminHousingForm(forms.Form):
+    """管理员代学生修改住宿楼栋（写入时由服务层记录操作人）。"""
+
+    student = forms.ModelChoiceField(
+        label="学生",
+        queryset=None,
+        empty_label="请选择学生",
+    )
+    building = forms.ModelChoiceField(
+        label="住宿楼栋",
+        queryset=None,
+        empty_label="请选择宿舍楼",
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["student"].queryset = User.objects.filter(
+            role=User.Role.STUDENT
+        ).order_by("username")
+        self.fields["building"].queryset = Building.objects.filter(
+            building_type="dorm", is_active=True
+        ).order_by("name")

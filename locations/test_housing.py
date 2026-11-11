@@ -2,13 +2,14 @@ from datetime import timedelta
 from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
-from django.db import close_old_connections
-from django.test import TestCase, TransactionTestCase
+from django.db import OperationalError, close_old_connections
+from django.test import Client, TestCase, TransactionTestCase
 from django.utils import timezone
 
 from accounts.models import User
 from locations.housing import (
     HOUSING_CHANGE_INTERVAL,
+    HousingChangeBusy,
     HousingChangeTooSoon,
     change_own_building,
     set_building_by_admin,
@@ -173,3 +174,94 @@ class HousingConcurrencyTests(TransactionTestCase):
         self.assertEqual(results.count(True), 1)
         self.assertEqual(results.count(False), 1)
         self.assertIsNotNone(StudentHousing.objects.get(student=student).last_self_change_at)
+
+
+class HousingLockRetryTests(TestCase):
+    """SQLite 写锁竞争不能变成 500，要重试或给出可读提示。"""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.dorm_a = Building.objects.create(name="锁A栋", building_type="dorm")
+        cls.dorm_b = Building.objects.create(name="锁B栋", building_type="dorm")
+
+    def setUp(self):
+        self.student = make_user("student00003")
+        StudentHousing.objects.create(
+            student=self.student,
+            building=self.dorm_a,
+            last_self_change_at=timezone.now() - HOUSING_CHANGE_INTERVAL - timedelta(days=1),
+        )
+
+    def test_lock_conflict_is_retried_then_succeeds(self):
+        from locations import housing as housing_module
+
+        real_apply = housing_module._apply_change
+        calls = {"count": 0}
+
+        def flaky_apply(*args, **kwargs):
+            calls["count"] += 1
+            if calls["count"] == 1:
+                raise OperationalError("database is locked")
+            return real_apply(*args, **kwargs)
+
+        with patch("locations.housing._apply_change", side_effect=flaky_apply):
+            result = change_own_building(self.student, self.dorm_b)
+
+        self.assertEqual(result.building, self.dorm_b)
+        self.assertEqual(calls["count"], 2)
+        self.assertEqual(StudentHousing.objects.get(student=self.student).building, self.dorm_b)
+
+    def test_lock_conflict_exhausted_raises_friendly_error(self):
+        with patch(
+            "locations.housing._apply_change",
+            side_effect=OperationalError("database is locked"),
+        ):
+            with self.assertRaises(HousingChangeBusy) as ctx:
+                change_own_building(self.student, self.dorm_b)
+
+        self.assertIn("重试", ctx.exception.messages[0])
+        # 失败时不留半成品数据
+        self.assertEqual(StudentHousing.objects.get(student=self.student).building, self.dorm_a)
+        self.assertEqual(HousingChangeLog.objects.filter(student=self.student).count(), 0)
+
+
+class HousingViewConcurrencyTests(TransactionTestCase):
+    """两个并发 HTTP 请求：一次成功，另一次得到明确提示，不能出现 500。"""
+
+    def test_concurrent_submissions_do_not_return_500(self):
+        dorm_a = Building.objects.create(name="视图A栋", building_type="dorm")
+        dorm_b = Building.objects.create(name="视图B栋", building_type="dorm")
+        dorm_c = Building.objects.create(name="视图C栋", building_type="dorm")
+        student = make_user("student00004")
+        StudentHousing.objects.create(
+            student=student,
+            building=dorm_a,
+            last_self_change_at=timezone.now() - HOUSING_CHANGE_INTERVAL - timedelta(days=1),
+        )
+
+        clients = []
+        for _ in range(2):
+            client = Client()
+            client.force_login(student)
+            clients.append(client)
+
+        def submit(index):
+            close_old_connections()
+            try:
+                target = dorm_b if index == 0 else dorm_c
+                return clients[index].post("/locations/housing/", {"building": target.pk})
+            finally:
+                close_old_connections()
+
+        from concurrent.futures import ThreadPoolExecutor
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            responses = list(pool.map(submit, range(2)))
+
+        statuses = [response.status_code for response in responses]
+        self.assertNotIn(500, statuses)
+        self.assertEqual(statuses.count(302), 1)
+
+        failed = responses[statuses.index(200)]
+        text = failed.content.decode()
+        self.assertTrue("30 天" in text or "重试" in text)

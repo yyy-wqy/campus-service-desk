@@ -1,7 +1,8 @@
+import time
 from datetime import timedelta
 
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError, models, transaction
+from django.db import IntegrityError, OperationalError, models, transaction
 from django.utils import timezone
 
 from .models import Building, HousingChangeLog, StudentHousing
@@ -10,6 +11,9 @@ from .models import Building, HousingChangeLog, StudentHousing
 HOUSING_CHANGE_INTERVAL = timedelta(days=30)
 
 DORM = "dorm"
+
+# SQLite 写锁竞争的有限重试次数；重试耗尽后返回可读提示，不抛 500
+LOCK_RETRIES = 4
 
 
 class HousingChangeTooSoon(ValidationError):
@@ -21,12 +25,40 @@ class HousingChangeTooSoon(ValidationError):
         super().__init__(f"每 30 天只能自行更换 1 次住宿楼栋，下次可更换时间：{allowed}")
 
 
+class HousingChangeBusy(ValidationError):
+    """并发写锁竞争，本次请求没有完成。"""
+
+    def __init__(self):
+        super().__init__("另一次换楼请求正在处理，请稍后刷新重试。")
+
+
+def _run_with_lock_retry(operation, *args, **kwargs):
+    """SQLite 并发写入会短暂返回 database is locked，做有限重试。"""
+
+    for attempt in range(LOCK_RETRIES):
+        try:
+            return operation(*args, **kwargs)
+        except OperationalError as exc:
+            if "locked" not in str(exc).lower() or attempt == LOCK_RETRIES - 1:
+                raise HousingChangeBusy() from exc
+            time.sleep(0.05 * (attempt + 1))
+    raise HousingChangeBusy()
+
+
 def next_allowed_change(housing):
     """返回下一次允许自助更换的时间；从未自助变更为 None。"""
 
     if housing is None or housing.last_self_change_at is None:
         return None
     return housing.last_self_change_at + HOUSING_CHANGE_INTERVAL
+
+
+def get_housing(student):
+    """读取住宿档案；并发写锁时重试，避免读操作直接把页面打成 500。"""
+
+    return _run_with_lock_retry(
+        lambda: StudentHousing.objects.select_related("building").filter(student=student).first()
+    )
 
 
 def _check_target(building):
@@ -48,15 +80,20 @@ def _log_change(student, actor, source, from_building, to_building):
     )
 
 
-def change_own_building(student, building):
-    """学生自助填写或更换住宿楼栋。
+def _apply_change(housing, building, now):
+    """带时间条件的 UPDATE；返回受影响行数，保证并发只有一次生效。"""
 
-    - 首次填写不计次、不启动冷却；
-    - 同一楼栋重复保存不计次；
-    - 楼栋实际变更后，满 30 天（含第 30 天整）才允许下一次自助变更；
-    - 并发请求通过带条件的 UPDATE 保证只有一次生效。
-    """
+    return (
+        StudentHousing.objects.filter(pk=housing.pk)
+        .filter(
+            models.Q(last_self_change_at__isnull=True)
+            | models.Q(last_self_change_at__lte=now - HOUSING_CHANGE_INTERVAL)
+        )
+        .update(building=building, last_self_change_at=now, updated_at=now)
+    )
 
+
+def _change_own_once(student, building):
     _check_target(building)
     now = timezone.now()
     with transaction.atomic():
@@ -80,14 +117,7 @@ def change_own_building(student, building):
             raise HousingChangeTooSoon(next_allowed)
 
         old_building = housing.building
-        updated = (
-            StudentHousing.objects.filter(pk=housing.pk)
-            .filter(
-                models.Q(last_self_change_at__isnull=True)
-                | models.Q(last_self_change_at__lte=now - HOUSING_CHANGE_INTERVAL)
-            )
-            .update(building=building, last_self_change_at=now, updated_at=now)
-        )
+        updated = _apply_change(housing, building, now)
         if not updated:
             # 并发请求已经改过：重新读取真实状态给出正确的下次时间。
             fresh = StudentHousing.objects.select_related("building").get(pk=housing.pk)
@@ -97,12 +127,20 @@ def change_own_building(student, building):
         return StudentHousing.objects.get(pk=housing.pk)
 
 
-def set_building_by_admin(student, building, actor):
-    """管理员随时修改住宿楼栋。
+def change_own_building(student, building):
+    """学生自助填写或更换住宿楼栋。
 
-    不计入学生的自助次数，也不重置学生的 30 天冷却，只做单独留痕。
+    - 首次填写不计次、不启动冷却；
+    - 同一楼栋重复保存不计次；
+    - 楼栋实际变更后，满 30 天（含第 30 天整）才允许下一次自助变更；
+    - 并发请求通过带条件的 UPDATE 保证只有一次生效；
+    - 数据库写锁竞争做有限重试，最终给出可读提示而不是 500。
     """
 
+    return _run_with_lock_retry(_change_own_once, student, building)
+
+
+def _admin_change_once(student, building, actor):
     _check_target(building)
     now = timezone.now()
     with transaction.atomic():
@@ -119,3 +157,13 @@ def set_building_by_admin(student, building, actor):
         StudentHousing.objects.filter(pk=housing.pk).update(building=building, updated_at=now)
         _log_change(student, actor, HousingChangeLog.Source.ADMIN, old_building, building)
         return StudentHousing.objects.get(pk=housing.pk)
+
+
+def set_building_by_admin(student, building, actor):
+    """管理员随时修改住宿楼栋。
+
+    不计入学生的自助次数，也不重置学生的 30 天冷却，只做单独留痕。
+    后台（Django admin 与基础资料管理页）都必须通过本函数写入，避免无痕修改。
+    """
+
+    return _run_with_lock_retry(_admin_change_once, student, building, actor)
