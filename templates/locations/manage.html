@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}基础资料管理 | 校园智办{% endblock %}
+{% block content %}
+<h1>基础资料管理</h1>
+<p class="field-help">楼栋、故障类别和公共区域只停用、不删除；历史工单保留提交时的名称。</p>
+
+<section class="manage-section">
+  <h2>楼栋</h2>
+  <p><a class="button button-primary button-small" href="{% url 'locations:building_create' %}">新增楼栋</a></p>
+  <table class="data-table">
+    <thead><tr><th>名称</th><th>类型</th><th>状态</th><th>操作</th></tr></thead>
+    <tbody>
+      {% for item in buildings %}
+        <tr>
+          <td>{{ item.name }}</td>
+          <td>{{ item.get_building_type_display }}</td>
+          <td>{% if item.is_active %}启用{% else %}已停用{% endif %}</td>
+          <td class="table-actions">
+            <a class="text-link" href="{% url 'locations:building_edit' item.pk %}">编辑</a>
+            <form method="post" action="{% url 'locations:manage_toggle' 'building' item.pk %}" class="inline-form">
+              {% csrf_token %}
+              <button class="button button-secondary button-small" type="submit">{% if item.is_active %}停用{% else %}启用{% endif %}</button>
+            </form>
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="4">暂无楼栋，请先新增。</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="manage-section">
+  <h2>故障类别</h2>
+  <p><a class="button button-primary button-small" href="{% url 'locations:category_create' %}">新增类别</a></p>
+  <table class="data-table">
+    <thead><tr><th>名称</th><th>是否教师专用</th><th>状态</th><th>操作</th></tr></thead>
+    <tbody>
+      {% for item in categories %}
+        <tr>
+          <td>{{ item.name }}</td>
+          <td>{% if item.is_teacher_only %}教师专用设备{% else %}普通设施{% endif %}</td>
+          <td>{% if item.is_active %}启用{% else %}已停用{% endif %}</td>
+          <td class="table-actions">
+            <a class="text-link" href="{% url 'locations:category_edit' item.pk %}">编辑</a>
+            <form method="post" action="{% url 'locations:manage_toggle' 'category' item.pk %}" class="inline-form">
+              {% csrf_token %}
+              <button class="button button-secondary button-small" type="submit">{% if item.is_active %}停用{% else %}启用{% endif %}</button>
+            </form>
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="4">暂无故障类别，请先新增。</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="manage-section">
+  <h2>公共区域</h2>
+  <p><a class="button button-primary button-small" href="{% url 'locations:public_area_create' %}">新增公共区域</a></p>
+  <table class="data-table">
+    <thead><tr><th>名称</th><th>排序</th><th>“其他”选项</th><th>状态</th><th>操作</th></tr></thead>
+    <tbody>
+      {% for item in public_areas %}
+        <tr>
+          <td>{{ item.name }}</td>
+          <td>{{ item.sort_order }}</td>
+          <td>{% if item.is_other %}是{% else %}否{% endif %}</td>
+          <td>{% if item.is_active %}启用{% else %}已停用{% endif %}</td>
+          <td class="table-actions">
+            <a class="text-link" href="{% url 'locations:public_area_edit' item.pk %}">编辑</a>
+            <form method="post" action="{% url 'locations:manage_toggle' 'public-area' item.pk %}" class="inline-form">
+              {% csrf_token %}
+              <button class="button button-secondary button-small" type="submit">{% if item.is_active %}停用{% else %}启用{% endif %}</button>
+            </form>
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="5">暂无公共区域，请先新增。</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}
