@@ -195,3 +195,36 @@ node --test tests/js/register.test.cjs
 仅已存在的账号写入登录保护表。未知账号的完整凭证提交按服务端看到的来源地址使用缓存计数，15 分钟内第 31 次起提示稍后重试。多进程部署需配置共享缓存以统一限频计数。停用已有会话的账号后，下一次访问受保护页面会返回 403 并清除会话。
 
 更新后执行 `python manage.py migrate`，新增部门和单位编号字段、教师审核历史及登录保护表，保留已有账号、联系方式和唯一约束。专项测试：`python manage.py test accounts.test_account_management`，包含资料白名单、审核权限与留痕、锁定边界、账号隔离及并发注册和计数验证。
+
+## 学生住宿、校园基础资料与报修范围（Issue #19）
+
+已确认实施规则：
+
+- 学生住宿信息一生一档，只记录当前楼栋。首次填写不计次、不启动冷却；同一楼栋重复保存不计次；楼栋实际变更后满 30 天（含第 30 天整）才允许下一次自助变更。限制只作用于住宿楼栋，不影响姓名、手机号等资料。
+- 学生可随时在 `/locations/housing/` 查看当前楼栋、下次可自助更换时间和本人变更记录；更换被拒时显示下次可更换时间。
+- 管理员在 `/locations/manage/` 维护楼栋、故障类别和公共区域，随时可修改学生住宿楼栋。管理员变更不计入学生自助次数、不重置学生 30 天冷却，并记录操作人、时间、来源及前后楼栋名称；只影响之后创建的工单，历史工单保留提交快照。
+- 面板与列表只停用、不删除：Django 管理后台同步关闭三类基础资料的删除权限，避免历史工单失去楼栋或类别。
+- 公共区域使用固定选项，默认走廊、楼梯间、卫生间、大厅、其他；管理员可新增、改名、排序和停用。`其他` 全库唯一，选择时必须填写具体位置文字；房间号与公共区域二选一。
+- 报修范围由服务端统一校验：学生可报本人宿舍普通设施和教学楼普通设施，不能报教师专用设备；教师可报教学楼普通设施和专用设备，不报宿舍；未填写住宿楼栋的学生仍可报教学楼普通设施。停用楼栋、类别和公共区域不能用于新单。
+- 每次提交都重新读取当前住宿信息与启用状态，页面参数不能代替服务端判断；绕过页面伪造地点类型、停用项或同时提交房间号与公共区域都会被拒绝。
+
+统一校验接口（供 Issue #20 创建报修调用）：
+
+```python
+from locations.scope import validate_repair_scope
+
+result = validate_repair_scope(
+    reporter=request.user,
+    building=building,
+    fault_category=category,
+    location_kind="room",          # 或 "public_area"
+    room_number="301",
+    public_area=None,              # 选公共区域时传 PublicAreaOption 实例
+    public_area_other="",          # 选“其他”时必填
+)
+result["location_detail"]          # "301" / "走廊" / "其他（三楼东侧）"
+```
+
+校验失败抛出 `ValidationError`，错误字典的键与表单字段同名：`reporter`、`building`、`fault_category`、`location_kind`、`room_number`、`public_area`、`public_area_other`。`locations.scope.reportable_buildings()` 和 `reportable_categories()` 可直接用作表单下拉的数据源。
+
+更新后执行 `python manage.py migrate`，新增 `locations/0002`（住宿档案、变更记录、公共区域）与 `locations/0003`（默认公共区域数据，回退时移除）。专项测试：`python manage.py test locations`，覆盖首次填写、30 天边界、并发换楼、管理员留痕、停用项、位置二选一、“其他”文字、角色范围与越权访问。
