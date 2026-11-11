@@ -1,4 +1,7 @@
+from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
+
 
 # 建筑楼栋模型（区分宿舍楼 / 教学楼）
 class Building(models.Model):
@@ -32,3 +35,112 @@ class FaultCategory(models.Model):
     class Meta:
         verbose_name = "报修故障分类"
         verbose_name_plural = "报修故障分类"
+
+
+# 公共区域固定选项（走廊 / 楼梯间 / 卫生间 / 大厅 / 其他）
+class PublicAreaOption(models.Model):
+    name = models.CharField("名称", max_length=50, unique=True)
+    is_other = models.BooleanField("是“其他”选项", default=False)
+    sort_order = models.PositiveSmallIntegerField("排序", default=0)
+    is_active = models.BooleanField("是否启用", default=True)
+    created_at = models.DateTimeField("创建时间", auto_now_add=True)
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        verbose_name = "公共区域选项"
+        verbose_name_plural = "公共区域选项"
+        ordering = ("sort_order", "id")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("is_other",),
+                condition=models.Q(is_other=True),
+                name="locations_single_other_public_area",
+            )
+        ]
+
+
+# 学生住宿档案：一生一档，只记录当前楼栋
+class StudentHousing(models.Model):
+    student = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="housing",
+        verbose_name="学生",
+    )
+    building = models.ForeignKey(
+        Building,
+        on_delete=models.PROTECT,
+        related_name="residents",
+        verbose_name="住宿楼栋",
+        limit_choices_to={"building_type": "dorm"},
+    )
+    last_self_change_at = models.DateTimeField(
+        "最近一次自助变更时间", null=True, blank=True
+    )
+    updated_at = models.DateTimeField("更新时间", auto_now=True)
+
+    def __str__(self):
+        return f"{self.student} - {self.building}"
+
+    class Meta:
+        verbose_name = "学生住宿信息"
+        verbose_name_plural = "学生住宿信息"
+
+
+# 住宿变更留痕：只追加，不覆盖
+class HousingChangeLog(models.Model):
+    class Source(models.TextChoices):
+        SELF = "self", "学生自助"
+        ADMIN = "admin", "管理员"
+
+    student = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="housing_changes",
+        verbose_name="学生",
+    )
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="housing_changes_made",
+        verbose_name="操作人",
+    )
+    source = models.CharField("变更来源", max_length=10, choices=Source.choices)
+    from_building = models.ForeignKey(
+        Building,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        verbose_name="原楼栋",
+    )
+    to_building = models.ForeignKey(
+        Building,
+        on_delete=models.PROTECT,
+        related_name="+",
+        verbose_name="新楼栋",
+    )
+    from_building_name = models.CharField("原楼栋名称快照", max_length=100, blank=True)
+    to_building_name = models.CharField("新楼栋名称快照", max_length=100)
+    created_at = models.DateTimeField("记录时间", auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.student} {self.from_building_name or '未填写'} → {self.to_building_name}"
+
+    class Meta:
+        verbose_name = "住宿变更记录"
+        verbose_name_plural = "住宿变更记录"
+        ordering = ("-created_at", "-pk")
+        indexes = [
+            models.Index(fields=("student", "created_at"), name="housing_log_student_time_idx")
+        ]
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            raise ValidationError("住宿变更记录只能追加，不能更新。")
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError("住宿变更记录只能追加，不能删除。")
