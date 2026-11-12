@@ -17,6 +17,31 @@ class Building(models.Model):
     def __str__(self):
         return self.name
 
+    def clean(self):
+        """宿舍楼不能在有学生住宿档案时改成教学楼。"""
+
+        super().clean()
+        if not self.pk:
+            return
+        original_type = (
+            type(self)
+            ._default_manager.filter(pk=self.pk)
+            .values_list("building_type", flat=True)
+            .first()
+        )
+        if (
+            original_type == "dorm"
+            and self.building_type != "dorm"
+            and StudentHousing.objects.filter(building_id=self.pk).exists()
+        ):
+            raise ValidationError(
+                {
+                    "building_type": (
+                        "该楼栋仍有学生住宿档案，请先迁移关联学生，再修改楼栋类型。"
+                    )
+                }
+            )
+
     class Meta:
         verbose_name = "校园楼栋"
         verbose_name_plural = "校园楼栋"

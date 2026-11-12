@@ -253,3 +253,68 @@ class AdminHousingPageTests(TestCase):
         self.assertEqual(
             StudentHousing.objects.get(student=self.student).building, self.dorm_a
         )
+
+
+class BuildingTypeChangeTests(TestCase):
+    """有学生住宿档案的宿舍楼不能直接改成教学楼（两个入口共用同一校验）。"""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.admin_user = make_user("admin000050", User.Role.ADMIN)
+        cls.student = make_user("student00050", User.Role.STUDENT)
+        cls.dorm = Building.objects.create(name="类型测试宿舍", building_type="dorm")
+
+    def setUp(self):
+        StudentHousing.objects.create(student=self.student, building=self.dorm)
+        self.admin_user.is_staff = True
+        self.admin_user.save(update_fields=["is_staff"])
+
+    def _post_business(self):
+        client = Client()
+        client.force_login(self.admin_user)
+        return client.post(
+            reverse("locations:building_edit", args=[self.dorm.pk]),
+            {"name": self.dorm.name, "building_type": "teach", "is_active": "on"},
+        )
+
+    def _post_admin(self):
+        client = Client()
+        client.force_login(self.admin_user)
+        return client.post(
+            f"/admin/locations/building/{self.dorm.pk}/change/",
+            {"name": self.dorm.name, "building_type": "teach", "is_active": "on"},
+        )
+
+    def test_business_page_blocks_type_change_while_housing_exists(self):
+        response = self._post_business()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "请先迁移关联学生")
+        self.dorm.refresh_from_db()
+        self.assertEqual(self.dorm.building_type, "dorm")
+
+    def test_business_page_allows_type_change_after_migration(self):
+        StudentHousing.objects.filter(building=self.dorm).delete()
+
+        response = self._post_business()
+
+        self.assertEqual(response.status_code, 302)
+        self.dorm.refresh_from_db()
+        self.assertEqual(self.dorm.building_type, "teach")
+
+    def test_django_admin_blocks_type_change_while_housing_exists(self):
+        response = self._post_admin()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "请先迁移关联学生")
+        self.dorm.refresh_from_db()
+        self.assertEqual(self.dorm.building_type, "dorm")
+
+    def test_django_admin_allows_type_change_after_migration(self):
+        StudentHousing.objects.filter(building=self.dorm).delete()
+
+        response = self._post_admin()
+
+        self.assertEqual(response.status_code, 302)
+        self.dorm.refresh_from_db()
+        self.assertEqual(self.dorm.building_type, "teach")
