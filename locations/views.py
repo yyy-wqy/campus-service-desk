@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.db import transaction
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods
@@ -22,6 +23,7 @@ from .housing import (
 )
 from .models import (
     Building,
+    BuildingTypeChangeConflict,
     FaultCategory,
     HousingChangeLog,
     PublicAreaOption,
@@ -134,9 +136,15 @@ def manage_housing(request):
 
 def _save_form(request, form, template, instance, success_message, label):
     if request.method == "POST" and form.is_valid():
-        form.save()
-        messages.success(request, success_message)
-        return redirect("locations:manage")
+        try:
+            with transaction.atomic():
+                form.save()
+        except BuildingTypeChangeConflict as exc:
+            # 并发兜底：校验通过后学生刚好建立了住宿档案。
+            form.add_error("building_type", exc.messages[0])
+        else:
+            messages.success(request, success_message)
+            return redirect("locations:manage")
     return render(
         request,
         template,

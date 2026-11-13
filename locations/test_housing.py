@@ -14,7 +14,12 @@ from locations.housing import (
     change_own_building,
     set_building_by_admin,
 )
-from locations.models import Building, HousingChangeLog, StudentHousing
+from locations.models import (
+    Building,
+    BuildingTypeChangeConflict,
+    HousingChangeLog,
+    StudentHousing,
+)
 
 
 def make_user(username, role=User.Role.STUDENT):
@@ -265,3 +270,65 @@ class HousingViewConcurrencyTests(TransactionTestCase):
         failed = responses[statuses.index(200)]
         text = failed.content.decode()
         self.assertTrue("30 天" in text or "重试" in text)
+
+
+class BuildingTypeRaceTests(TestCase):
+    """管理员改楼栋类型与学生换楼的两种提交顺序都不能产生“住宿在教学楼”。"""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.dorm_a = Building.objects.create(name="竞态A栋", building_type="dorm")
+        cls.dorm_b = Building.objects.create(name="竞态B栋", building_type="dorm")
+
+    def test_order_admin_commits_first_then_student_saves(self):
+        # 学生先拿到了 A 栋的旧对象，校验也认为它是宿舍楼
+        stale = Building.objects.get(pk=self.dorm_a.pk)
+        student = make_user("student00070")
+        StudentHousing.objects.create(student=student, building=self.dorm_b)
+        self.dorm_a.refresh_from_db()
+        stale.building_type = "dorm"
+
+        # 管理员先保存：A 栋改为教学楼
+        Building.objects.filter(pk=self.dorm_a.pk).update(building_type="teach")
+
+        # 学生后保存：必须拒绝，不能把档案写进教学楼
+        with self.assertRaises(ValidationError) as ctx:
+            change_own_building(student, stale)
+        self.assertIn("building", ctx.exception.message_dict)
+        self.assertEqual(
+            StudentHousing.objects.get(student=student).building, self.dorm_b
+        )
+
+    def test_order_student_commits_first_then_admin_saves(self):
+        dorm = Building.objects.create(name="竞态C栋", building_type="dorm")
+        student = make_user("student00071")
+        student_view = Building.objects.get(pk=dorm.pk)  # 学生用旧对象
+        admin_view = Building.objects.get(pk=dorm.pk)  # 管理员用另一个对象
+
+        # 管理员先通过表单校验（此刻还没有住宿档案）
+        admin_view.building_type = "teach"
+        admin_view.full_clean()
+
+        # 学生先保存成功
+        change_own_building(student, student_view)
+        self.assertEqual(
+            StudentHousing.objects.get(student=student).building_id, dorm.pk
+        )
+
+        # 管理员后保存：必须拒绝并回滚，楼栋仍是宿舍楼
+        with self.assertRaises(BuildingTypeChangeConflict):
+            admin_view.save()
+        dorm.refresh_from_db()
+        self.assertEqual(dorm.building_type, "dorm")
+
+    def test_first_fill_rejected_when_building_became_teaching(self):
+        dorm = Building.objects.create(name="竞态D栋", building_type="dorm")
+        stale = Building.objects.get(pk=dorm.pk)
+        student = make_user("student00072")
+
+        Building.objects.filter(pk=dorm.pk).update(building_type="teach")
+
+        with self.assertRaises(ValidationError) as ctx:
+            change_own_building(student, stale)
+        self.assertIn("building", ctx.exception.message_dict)
+        self.assertFalse(StudentHousing.objects.filter(student=student).exists())

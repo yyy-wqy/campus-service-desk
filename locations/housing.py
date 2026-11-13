@@ -80,8 +80,20 @@ def _log_change(student, actor, source, from_building, to_building):
     )
 
 
+def _building_is_reportable_dorm(building_id):
+    """数据库当前状态是否仍为可用宿舍楼。"""
+
+    return Building.objects.filter(
+        pk=building_id, building_type=DORM, is_active=True
+    ).exists()
+
+
 def _apply_change(housing, building, now):
-    """带时间条件的 UPDATE；返回受影响行数，保证并发只有一次生效。"""
+    """带时间和楼栋条件的 UPDATE；返回受影响行数。
+
+    条件里带上“目标楼栋仍是可用宿舍楼”，保证管理员把楼栋改成教学楼后，
+    即使学生请求用的是旧对象，也不会把住宿档案写进教学楼。
+    """
 
     return (
         StudentHousing.objects.filter(pk=housing.pk)
@@ -89,8 +101,26 @@ def _apply_change(housing, building, now):
             models.Q(last_self_change_at__isnull=True)
             | models.Q(last_self_change_at__lte=now - HOUSING_CHANGE_INTERVAL)
         )
+        .filter(
+            models.Exists(
+                Building.objects.filter(
+                    pk=building.pk, building_type=DORM, is_active=True
+                )
+            )
+        )
         .update(building=building, last_self_change_at=now, updated_at=now)
     )
+
+
+def _raise_change_failure(housing, building, now):
+    """UPDATE 没生效时给出准确原因：楼栋变了，还是 30 天未到。"""
+
+    if not _building_is_reportable_dorm(building.pk):
+        raise ValidationError(
+            {"building": "该楼栋已改为教学楼或已停用，请重新选择。"}
+        )
+    fresh = StudentHousing.objects.select_related("building").get(pk=housing.pk)
+    raise HousingChangeTooSoon(next_allowed_change(fresh) or now)
 
 
 def _change_own_once(student, building):
@@ -102,6 +132,11 @@ def _change_own_once(student, building):
             try:
                 with transaction.atomic():
                     StudentHousing.objects.create(student=student, building=building)
+                    # 先写入取得写锁，再复核楼栋当前状态，避免与管理员改类型并发。
+                    if not _building_is_reportable_dorm(building.pk):
+                        raise ValidationError(
+                            {"building": "该楼栋已改为教学楼或已停用，请重新选择。"}
+                        )
             except IntegrityError:
                 # 并发首次填写：另一个请求已经建好档案，转为变更流程。
                 housing = StudentHousing.objects.select_related("building").get(student=student)
@@ -119,9 +154,7 @@ def _change_own_once(student, building):
         old_building = housing.building
         updated = _apply_change(housing, building, now)
         if not updated:
-            # 并发请求已经改过：重新读取真实状态给出正确的下次时间。
-            fresh = StudentHousing.objects.select_related("building").get(pk=housing.pk)
-            raise HousingChangeTooSoon(next_allowed_change(fresh) or now)
+            _raise_change_failure(housing, building, now)
 
         _log_change(student, student, HousingChangeLog.Source.SELF, old_building, building)
         return StudentHousing.objects.get(pk=housing.pk)
@@ -147,6 +180,10 @@ def _admin_change_once(student, building, actor):
         housing = StudentHousing.objects.select_related("building").filter(student=student).first()
         if housing is None:
             StudentHousing.objects.create(student=student, building=building)
+            if not _building_is_reportable_dorm(building.pk):
+                raise ValidationError(
+                    {"building": "该楼栋已改为教学楼或已停用，请重新选择。"}
+                )
             _log_change(student, actor, HousingChangeLog.Source.ADMIN, None, building)
             return StudentHousing.objects.get(student=student)
 
@@ -154,7 +191,21 @@ def _admin_change_once(student, building, actor):
             return housing
 
         old_building = housing.building
-        StudentHousing.objects.filter(pk=housing.pk).update(building=building, updated_at=now)
+        updated = (
+            StudentHousing.objects.filter(pk=housing.pk)
+            .filter(
+                models.Exists(
+                    Building.objects.filter(
+                        pk=building.pk, building_type=DORM, is_active=True
+                    )
+                )
+            )
+            .update(building=building, updated_at=now)
+        )
+        if not updated:
+            raise ValidationError(
+                {"building": "该楼栋已改为教学楼或已停用，请重新选择。"}
+            )
         _log_change(student, actor, HousingChangeLog.Source.ADMIN, old_building, building)
         return StudentHousing.objects.get(pk=housing.pk)
 

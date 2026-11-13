@@ -287,3 +287,12 @@ class FreshDataTests(TestCase):
         with self.assertRaises(ValidationError) as ctx:
             self.scope(building=self.teach, fault_category=stale)
         self.assertIn("fault_category", ctx.exception.message_dict)
+
+    def test_missing_public_area_still_conflicts_with_room(self):
+        # 公共区域选项已被删除：原始参数存在就必须报冲突，不能因为重查为空而忽略
+        missing = PublicAreaOption(pk=10**9)
+
+        with self.assertRaises(ValidationError) as ctx:
+            self.scope(location_kind="room", room_number="301", public_area=missing)
+
+        self.assertIn("public_area", ctx.exception.message_dict)

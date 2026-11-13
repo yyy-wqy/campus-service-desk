@@ -78,6 +78,9 @@ def validate_repair_scope(
     )
 
     # 2. 楼栋、类别、公共区域：同样以数据库当前状态为准。
+    #    是否“提交了公共区域”要按原始参数判断：选项被删后重新查询会是空值，
+    #    不能用空值反推“没提交”，否则房间号与公共区域的冲突会被忽略。
+    public_area_provided = public_area is not None
     building = _reload(Building, building)
     fault_category = _reload(FaultCategory, fault_category)
     public_area = _reload(PublicAreaOption, public_area)
@@ -112,7 +115,7 @@ def validate_repair_scope(
     if location_kind not in dict(LOCATION_KIND_CHOICES):
         errors["location_kind"] = "请选择有效的位置类型。"
     elif location_kind == LOCATION_KIND_ROOM:
-        if public_area is not None:
+        if public_area_provided:
             errors["public_area"] = "房间号与公共区域只能填写一项。"
         if other_text:
             errors["public_area_other"] = "只有选择“其他”公共区域时才能填写具体位置。"

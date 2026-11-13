@@ -1,6 +1,10 @@
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import models, transaction
+
+
+class BuildingTypeChangeConflict(ValidationError):
+    """楼栋仍有住宿档案时不能改成教学楼（并发下的最终保护）。"""
 
 
 # 建筑楼栋模型（区分宿舍楼 / 教学楼）
@@ -41,6 +45,32 @@ class Building(models.Model):
                     )
                 }
             )
+
+    def save(self, *args, **kwargs):
+        """宿舍楼改教学楼时先写入、再在同一事务内复核住宿关联。
+
+        先写入是为了取得数据库写锁：并发的学生换楼必须等本事务结束。
+        若仍有住宿档案则抛错回滚，两个入口（业务页、Django 后台）共用本保护。
+        """
+
+        if not self.pk:
+            return super().save(*args, **kwargs)
+
+        original_type = (
+            type(self)
+            ._default_manager.filter(pk=self.pk)
+            .values_list("building_type", flat=True)
+            .first()
+        )
+        if original_type != "dorm" or self.building_type == "dorm":
+            return super().save(*args, **kwargs)
+
+        with transaction.atomic():
+            super().save(*args, **kwargs)
+            if StudentHousing.objects.filter(building_id=self.pk).exists():
+                raise BuildingTypeChangeConflict(
+                    "该楼栋仍有学生住宿档案，请先迁移关联学生，再修改楼栋类型。"
+                )
 
     class Meta:
         verbose_name = "校园楼栋"

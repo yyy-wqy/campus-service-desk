@@ -1,8 +1,17 @@
-from django.contrib import admin
+from django.contrib import admin, messages
+from django.db import transaction
+from django.http import HttpResponseRedirect
 
 from accounts.models import User
 
-from .models import Building, FaultCategory, HousingChangeLog, PublicAreaOption, StudentHousing
+from .models import (
+    Building,
+    BuildingTypeChangeConflict,
+    FaultCategory,
+    HousingChangeLog,
+    PublicAreaOption,
+    StudentHousing,
+)
 
 
 class BusinessAdminOnly(admin.ModelAdmin):
@@ -45,6 +54,18 @@ class BuildingAdmin(BusinessAdminOnly):
     list_filter = ["building_type", "is_active"]
     search_fields = ["name"]
     readonly_fields = ("created_at",)
+
+    def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
+        """并发兜底：保存时若学生刚好建立了住宿档案，显示提示而不是 500。"""
+
+        try:
+            with transaction.atomic():
+                return super().changeform_view(
+                    request, object_id, form_url, extra_context
+                )
+        except BuildingTypeChangeConflict as exc:
+            self.message_user(request, exc.messages[0], messages.ERROR)
+            return HttpResponseRedirect(request.path)
 
 
 @admin.register(FaultCategory)
