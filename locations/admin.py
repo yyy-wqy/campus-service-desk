@@ -1,5 +1,6 @@
 from django.contrib import admin, messages
-from django.db import transaction
+from django.db import OperationalError, transaction
+from .db_errors import LOCK_CONFLICT_MESSAGE, is_sqlite_lock_error
 from django.http import HttpResponseRedirect
 
 from accounts.models import User
@@ -65,6 +66,11 @@ class BuildingAdmin(BusinessAdminOnly):
                 )
         except BuildingTypeChangeConflict as exc:
             self.message_user(request, exc.messages[0], messages.ERROR)
+            return HttpResponseRedirect(request.path)
+        except OperationalError as exc:
+            if not is_sqlite_lock_error(exc):
+                raise
+            self.message_user(request, LOCK_CONFLICT_MESSAGE, messages.ERROR)
             return HttpResponseRedirect(request.path)
 
 

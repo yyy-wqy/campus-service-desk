@@ -1,7 +1,8 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.db import transaction
+from django.db import OperationalError, transaction
+from .db_errors import LOCK_CONFLICT_MESSAGE, is_sqlite_lock_error
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods
@@ -142,6 +143,10 @@ def _save_form(request, form, template, instance, success_message, label):
         except BuildingTypeChangeConflict as exc:
             # 并发兜底：校验通过后学生刚好建立了住宿档案。
             form.add_error("building_type", exc.messages[0])
+        except OperationalError as exc:
+            if not is_sqlite_lock_error(exc):
+                raise
+            form.add_error(None, LOCK_CONFLICT_MESSAGE)
         else:
             messages.success(request, success_message)
             return redirect("locations:manage")
