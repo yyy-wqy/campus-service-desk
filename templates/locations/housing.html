@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}住宿信息 | 校园智办{% endblock %}
+{% block content %}
+<h1>住宿信息</h1>
+<p>当前住宿楼栋：{% if housing %}{{ housing.building.name }}{% else %}未填写{% endif %}</p>
+{% if next_allowed_at %}
+  <p class="field-help">每 30 天可自行更换 1 次住宿楼栋，下次可自助更换时间：{{ next_allowed_at|date:"Y-m-d H:i" }}</p>
+{% endif %}
+<form method="post" class="login-form">
+{% csrf_token %}
+{% include "registration/recovery_fields.html" %}
+<button class="button button-primary" type="submit">保存住宿信息</button>
+</form>
+
+<h2>变更记录</h2>
+{% if history %}
+<table class="data-table">
+  <thead><tr><th>时间</th><th>原楼栋</th><th>新楼栋</th><th>操作人</th><th>来源</th></tr></thead>
+  <tbody>
+    {% for item in history %}
+      <tr>
+        <td>{{ item.created_at|date:"Y-m-d H:i" }}</td>
+        <td>{{ item.from_building_name|default:"未填写" }}</td>
+        <td>{{ item.to_building_name }}</td>
+        <td>{{ item.actor.real_name|default:item.actor.username }}</td>
+        <td>{{ item.get_source_display }}</td>
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+  <p>暂无变更记录。</p>
+{% endif %}
+{% endblock %}

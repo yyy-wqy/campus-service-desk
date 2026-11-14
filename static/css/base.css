@@ -325,3 +325,13 @@ svg { display: block; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
 }
+
+/* 基础资料管理表格与列表页 */
+.manage-section { margin-top: 32px; }
+.manage-section h2 { margin-bottom: 12px; }
+.data-table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 14px; }
+.data-table th, .data-table td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #d7ded9; vertical-align: middle; }
+.data-table th { color: #3d5148; font-weight: 600; background: #f4f7f4; }
+.data-table tr:last-child td { border-bottom: none; }
+.table-actions { display: flex; align-items: center; gap: 12px; }
+.inline-form { display: inline; margin: 0; }

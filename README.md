@@ -97,4 +97,44 @@ node --test tests/js/register.test.cjs
 - [查看迭代里程碑](https://github.com/yyy-wqy/campus-service-desk/milestones)
 - [第一版需求与产品设计](docs/校园智办_第一版需求与产品设计_V1.0.docx)
 
+## 学生住宿、校园基础资料与报修范围（Issue #19）
+
+已确认实施规则：
+
+- 学生住宿信息一生一档，只记录当前楼栋。首次填写不计次、不启动冷却；同一楼栋重复保存不计次；楼栋实际变更后满 30 天（含第 30 天整）才允许下一次自助变更。限制只作用于住宿楼栋，不影响姓名、手机号等资料。
+- 学生可随时在 `/locations/housing/` 查看当前楼栋、下次可自助更换时间和本人变更记录；更换被拒时显示下次可更换时间。
+- 管理员在 `/locations/manage/` 维护楼栋、故障类别和公共区域，随时可修改学生住宿楼栋。管理员变更不计入学生自助次数、不重置学生 30 天冷却，并记录操作人、时间、来源及前后楼栋名称；只影响之后创建的工单，历史工单保留提交快照。
+- 管理员代改住宿统一走 `/locations/manage/housing/`，写入时必须经过 `locations.housing.set_building_by_admin()`，由服务层补记录操作人、时间和前后楼栋；Django 管理后台的住宿档案为只读，不能再无痕修改。
+- Django 管理后台的 locations 模型只对业务管理员开放（`role=admin` 且审核通过）：即使教师被授予 Django 模型权限，也无法在后台查看或修改楼栋、故障类别、公共区域和他人住宿档案。
+- SQLite 并发写入的 `database is locked` 做有限重试；重试后仍冲突时返回“另一次换楼请求正在处理，请稍后刷新重试”的可读提示，不会返回 500。
+- 面板与列表只停用、不删除：Django 管理后台同步关闭三类基础资料的删除权限，避免历史工单失去楼栋或类别。
+- 公共区域使用固定选项，默认走廊、楼梯间、卫生间、大厅、其他；管理员可新增、改名、排序和停用。`其他` 全库唯一，选择时必须填写具体位置文字；房间号与公共区域二选一。
+- 位置参数必须与选项一致：选择房间时提交“其他”位置文字、选择普通公共区域时提交“其他”文字，都会返回对应字段错误；只有选择“其他”并填写具体位置才通过。是否“提交了公共区域”按原始参数判断，选项被删也不影响“二选一”冲突的判断。
+- 报修范围由服务端统一校验：学生可报本人宿舍普通设施和教学楼普通设施，不能报教师专用设备；教师可报教学楼普通设施和专用设备，不报宿舍；未填写住宿楼栋的学生仍可报教学楼普通设施。停用楼栋、类别和公共区域不能用于新单。
+- 校验入口按主键重新读取身份、住宿、楼栋、故障类别和公共区域，调用方缓存的旧对象不能让已迁出的宿舍或已停用项通过；管理员把学生从 A 栋迁到 B 栋后，旧宿舍立即被拒绝，新宿舍可以正常报修。
+- 每次提交都重新读取当前住宿信息与启用状态，页面参数不能代替服务端判断；绕过页面伪造地点类型、停用项或同时提交房间号与公共区域都会被拒绝。
+- 宿舍楼仍有学生住宿档案时不能改成教学楼：业务管理页和 Django 后台共用模型校验，提示管理员先迁移关联学生，再修改楼栋类型。
+- 并发写入有第二道保护：学生换楼的 UPDATE 条件同时要求“目标楼栋仍是启用中的宿舍楼”，管理员改楼栋类型则先写入取得写锁、再在同一事务内复核住宿关联。因此“管理员先改类型”和“学生先保存住宿”两种顺序都只会有一边成功，不会出现住宿档案指向教学楼。
+
+统一校验接口（供 Issue #20 创建报修调用）：
+
+```python
+from locations.scope import validate_repair_scope
+
+result = validate_repair_scope(
+    reporter=request.user,
+    building=building,
+    fault_category=category,
+    location_kind="room",          # 或 "public_area"
+    room_number="301",
+    public_area=None,              # 选公共区域时传 PublicAreaOption 实例
+    public_area_other="",          # 选“其他”时必填
+)
+result["location_detail"]          # "301" / "走廊" / "其他（三楼东侧）"
+```
+
+校验失败抛出 `ValidationError`，错误字典的键与表单字段同名：`reporter`、`building`、`fault_category`、`location_kind`、`room_number`、`public_area`、`public_area_other`。`locations.scope.reportable_buildings()` 和 `reportable_categories()` 可直接用作表单下拉的数据源。
+
+更新后执行 `python manage.py migrate`，新增 `locations/0002`（住宿档案、变更记录、公共区域）与 `locations/0003`（默认公共区域数据，回退时移除）。专项测试：`python manage.py test locations`，覆盖首次填写、30 天边界、并发换楼、管理员留痕、停用项、位置二选一、“其他”文字、角色范围与越权访问。
+
 欢迎通过 Issue 提交问题或改进建议。
