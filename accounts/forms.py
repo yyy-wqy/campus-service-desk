@@ -124,6 +124,9 @@ class RegistrationForm(UserCreationForm):
                     user.username = "maint_" + uuid.uuid4().hex
             else:
                 raise IntegrityError("无法分配唯一维修账号，请重试。")
+            if user.role == User.Role.MAINTENANCE:
+                from .models import MaintenanceApplication
+                MaintenanceApplication.objects.get_or_create(worker=user)
         return user
 
 
@@ -162,6 +165,10 @@ class AccountAuthenticationForm(AuthenticationForm):
             raise ValidationError(
                 "账号角色异常，请联系管理员。", code="invalid_role"
             )
+        if user.role == User.Role.MAINTENANCE:
+            from .models import MaintenanceApplication
+            if user.approval_status == "pending" and MaintenanceApplication.objects.filter(worker=user, status__in=["draft", "needs_more"]).exists():
+                return
         if user.approval_status == User.ApprovalStatus.PENDING:
             raise ValidationError(
                 "账号待审核，请等待管理员审核通过后再登录。", code="pending"

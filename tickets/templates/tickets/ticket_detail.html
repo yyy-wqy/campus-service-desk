@@ -34,5 +34,66 @@
       </dl>
     </aside>
   </div>
+
+  {% if user.role == 'admin' %}
+    <section class="surface-card admin-ticket-actions">
+      <h2>管理员操作</h2>
+      {% if ticket.status == 'pending_acceptance' %}
+        <div class="admin-action-grid">
+          <form class="ticket-form" method="post" action="{% url 'tickets:accept' ticket.pk %}">
+            {% csrf_token %}
+            <h3>受理并首次分派</h3>
+            <p>受理与首次分派会同时完成；任一步骤失败都不会改变工单。</p>
+            <div class="field-group">
+              <label for="{{ assignment_form.worker.id_for_label }}">{{ assignment_form.worker.label }}</label>
+              {{ assignment_form.worker }}
+            </div>
+            <button class="button button-primary" type="submit">确认受理并分派</button>
+          </form>
+          <form class="ticket-form" method="post" action="{% url 'tickets:reject' ticket.pk %}">
+            {% csrf_token %}
+            <h3>不予受理</h3>
+            <div class="field-group">
+              <label for="{{ reject_form.reason.id_for_label }}">{{ reject_form.reason.label }}</label>
+              {{ reject_form.reason }}
+            </div>
+            <button class="button button-secondary" type="submit">确认不予受理</button>
+          </form>
+        </div>
+      {% endif %}
+
+      {% if ticket.status == 'pending_acceptance' or ticket.status == 'pending_work' %}
+        <form class="ticket-form inline-action-form" method="post" action="{% url 'tickets:set_priority' ticket.pk %}">
+          {% csrf_token %}
+          <div class="field-group">
+            <label for="{{ priority_form.priority.id_for_label }}">{{ priority_form.priority.label }}</label>
+            {{ priority_form.priority }}
+          </div>
+          <button class="button button-secondary" type="submit">更新优先级</button>
+        </form>
+      {% endif %}
+
+      {% if ticket.status == 'pending_work' and ticket.current_assignee %}
+        <p class="preview-notice">该工单已完成首次分派；更换处理人应通过后续转派流程进行。</p>
+      {% elif ticket.status == 'pending_work' %}
+        <p class="form-alert">工单处于待处理状态但没有处理人，数据状态异常，请联系系统管理员核查。</p>
+      {% endif %}
+    </section>
+  {% endif %}
+
+  <section class="surface-card ticket-history">
+    <h2>操作历史</h2>
+    <ol>
+      {% for event in history %}
+        <li>
+          <div><strong>{{ event.get_event_type_display }}</strong><time>{{ event.created_at|date:'Y-m-d H:i' }}</time></div>
+          <p>{{ event.description|default:'无补充说明' }}</p>
+          <small>操作人：{{ event.actor.real_name|default:event.actor.username }}</small>
+        </li>
+      {% empty %}
+        <li>暂无历史记录。</li>
+      {% endfor %}
+    </ol>
+  </section>
   <div class="form-actions"><a class="button button-secondary" href="{% url 'tickets:list' %}">返回列表</a></div>
 {% endblock %}

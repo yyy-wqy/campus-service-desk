@@ -7,7 +7,9 @@
     <h2>暂时无法进入平台</h2>
   </header>
   <div class="form-alert" role="alert">
-    {% if user.approval_status == 'pending' %}
+    {% if user.role == 'maintenance' %}
+      当前账号暂不能进入维修业务。请查看 <a href="{% url 'accounts:qualifications' %}">本人资质申请与审核进度</a>，或联系管理员。
+    {% elif user.approval_status == 'pending' %}
       账号待审核，请等待管理员审核通过后再登录。
     {% elif user.approval_status == 'rejected' %}
       账号审核未通过：{{ user.approval_reason|default:'请联系管理员了解详情。' }}
