@@ -11,6 +11,7 @@ def is_approved_business_user(user):
         and user.is_active
         and user.role in User.Role.values
         and user.approval_status == User.ApprovalStatus.APPROVED
+        and (user.role != User.Role.MAINTENANCE or user.can_handle_maintenance)
     )
 
 
