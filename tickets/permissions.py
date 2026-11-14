@@ -57,7 +57,7 @@ def can_transition_ticket(user, ticket, to_status):
     """Check the business actor for a concrete status transition."""
 
     if ticket.status == Ticket.Status.PENDING_ACCEPTANCE:
-        if to_status in {Ticket.Status.PENDING_WORK, Ticket.Status.REJECTED}:
+        if to_status == Ticket.Status.REJECTED:
             return can_manage_ticket(user)
         if to_status == Ticket.Status.CANCELLED:
             return can_confirm_ticket(user, ticket)

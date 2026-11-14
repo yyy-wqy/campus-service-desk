@@ -70,6 +70,16 @@ class Ticket(models.Model):
         "category_name_snapshot",
         "category_teacher_only_snapshot",
     )
+    ASSIGNEE_REQUIRED_STATUSES = (
+        Status.PENDING_WORK,
+        Status.IN_PROGRESS,
+        Status.PENDING_CONFIRMATION,
+        Status.COMPLETED,
+    )
+    ASSIGNEE_FORBIDDEN_STATUSES = (
+        Status.PENDING_ACCEPTANCE,
+        Status.REJECTED,
+    )
 
     number = models.CharField("工单编号", max_length=18, unique=True, editable=False)
     reporter = models.ForeignKey(
@@ -142,6 +152,29 @@ class Ticket(models.Model):
                 fields=("current_assignee", "status"), name="ticket_assignee_status_idx"
             ),
         ]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    ~models.Q(
+                        status__in=(
+                            "pending_work",
+                            "in_progress",
+                            "pending_confirmation",
+                            "completed",
+                        )
+                    )
+                    | models.Q(current_assignee__isnull=False)
+                ),
+                name="ticket_processing_status_has_assignee",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    ~models.Q(status__in=("pending_acceptance", "rejected"))
+                    | models.Q(current_assignee__isnull=True)
+                ),
+                name="ticket_preassignment_status_has_no_assignee",
+            ),
+        ]
 
     def __str__(self):
         return f"{self.number} {self.title}"
@@ -156,6 +189,10 @@ class Ticket(models.Model):
                 errors["current_assignee"] = "当前处理人必须是维修人员。"
             elif self.current_assignee.approval_status != "approved":
                 errors["current_assignee"] = "当前处理人必须已审核通过。"
+        if self.status in self.ASSIGNEE_REQUIRED_STATUSES and not self.current_assignee_id:
+            errors["current_assignee"] = "该工单状态必须设置当前维修人员。"
+        if self.status in self.ASSIGNEE_FORBIDDEN_STATUSES and self.current_assignee_id:
+            errors["current_assignee"] = "该工单状态不能预先设置维修人员。"
         if errors:
             raise ValidationError(errors)
 

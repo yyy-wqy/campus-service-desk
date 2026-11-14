@@ -9,6 +9,7 @@ from django.db import close_old_connections
 from django.test import TestCase, TransactionTestCase
 from django.urls import reverse
 
+from accounts.models import MaintenanceApplication
 from locations.models import (
     Building,
     FaultCategory,
@@ -24,6 +25,7 @@ from .permissions import (
     can_process_ticket,
 )
 from .services import (
+    accept_and_assign_ticket,
     TicketCreationFailed,
     TicketNumberExhausted,
     create_ticket,
@@ -62,6 +64,14 @@ class TicketFixtureMixin:
             password="test-password",
             role="maintenance",
             approval_status="approved",
+        )
+        MaintenanceApplication.objects.create(
+            worker=cls.maintenance,
+            status=MaintenanceApplication.Status.APPROVED,
+        )
+        MaintenanceApplication.objects.create(
+            worker=cls.other_maintenance,
+            status=MaintenanceApplication.Status.APPROVED,
         )
         cls.admin = user_model.objects.create_user(
             username="admin-one",
@@ -280,14 +290,26 @@ class TicketCreationServiceTests(TicketFixtureMixin, TestCase):
 
     def test_status_transition_and_history_are_atomic(self):
         ticket = self.create_valid_ticket()
-        changed = transition_ticket(
+        with self.assertRaises(ValidationError):
+            transition_ticket(
+                ticket=ticket,
+                actor=self.admin,
+                to_status=Ticket.Status.PENDING_WORK,
+                description="绕过首次分派",
+            )
+        ticket.refresh_from_db()
+        self.assertEqual(ticket.status, Ticket.Status.PENDING_ACCEPTANCE)
+        self.assertIsNone(ticket.current_assignee)
+        self.assertEqual(ticket.history.count(), 1)
+
+        changed = accept_and_assign_ticket(
             ticket=ticket,
             actor=self.admin,
-            to_status=Ticket.Status.PENDING_WORK,
-            description="管理员受理",
+            worker=self.maintenance,
         )
         self.assertEqual(changed.status, Ticket.Status.PENDING_WORK)
-        self.assertEqual(changed.history.count(), 2)
+        self.assertEqual(changed.current_assignee, self.maintenance)
+        self.assertEqual(changed.history.count(), 3)
 
         with self.assertRaises(ValidationError):
             transition_ticket(
@@ -298,10 +320,10 @@ class TicketCreationServiceTests(TicketFixtureMixin, TestCase):
 
     def test_status_transition_rejects_actor_impersonation(self):
         ticket = self.create_valid_ticket()
-        ticket = transition_ticket(
+        ticket = accept_and_assign_ticket(
             ticket=ticket,
             actor=self.admin,
-            to_status=Ticket.Status.PENDING_WORK,
+            worker=self.maintenance,
         )
 
         with self.assertRaises(PermissionDenied):
@@ -312,24 +334,25 @@ class TicketCreationServiceTests(TicketFixtureMixin, TestCase):
             )
         ticket.refresh_from_db()
         self.assertEqual(ticket.status, Ticket.Status.PENDING_WORK)
-        self.assertEqual(ticket.history.count(), 2)
+        self.assertEqual(ticket.history.count(), 3)
 
-        ticket.current_assignee = self.maintenance
-        ticket.save(update_fields=("current_assignee", "updated_at"))
         changed = transition_ticket(
             ticket=ticket,
             actor=self.maintenance,
             to_status=Ticket.Status.IN_PROGRESS,
         )
         self.assertEqual(changed.status, Ticket.Status.IN_PROGRESS)
-        self.assertEqual(changed.history.count(), 3)
+        self.assertEqual(changed.history.count(), 4)
 
 
 class TicketPermissionTests(TicketFixtureMixin, TestCase):
     def test_action_permissions_are_role_and_ownership_specific(self):
         ticket = self.create_valid_ticket()
-        ticket.current_assignee = self.maintenance
-        ticket.save(update_fields=("current_assignee", "updated_at"))
+        ticket = accept_and_assign_ticket(
+            ticket=ticket,
+            actor=self.admin,
+            worker=self.maintenance,
+        )
 
         self.assertTrue(can_create_ticket(self.student))
         self.assertFalse(can_create_ticket(self.maintenance))
@@ -509,8 +532,11 @@ class TicketViewTests(TicketFixtureMixin, TestCase):
                 response = self.client.get(reverse("tickets:detail", args=(ticket.pk,)))
                 self.assertEqual(response.status_code, expected)
 
-        ticket.current_assignee = self.maintenance
-        ticket.save(update_fields=("current_assignee", "updated_at"))
+        ticket = accept_and_assign_ticket(
+            ticket=ticket,
+            actor=self.admin,
+            worker=self.maintenance,
+        )
         self.client.force_login(self.maintenance)
         self.assertEqual(
             self.client.get(reverse("tickets:detail", args=(ticket.pk,))).status_code,
