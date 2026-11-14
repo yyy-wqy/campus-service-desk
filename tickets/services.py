@@ -5,6 +5,7 @@ from django.db import DatabaseError, OperationalError, transaction
 from django.db.models import F
 from django.utils import timezone
 
+from accounts.models import User
 from locations.scope import validate_repair_scope
 
 from .models import Ticket, TicketDailySequence, TicketHistory
@@ -48,11 +49,8 @@ def _create_ticket_once(
     preferred_visit_time="",
 ):
     with transaction.atomic():
+        reporter = User.objects.filter(pk=getattr(reporter, "pk", None)).first()
         require_create_permission(reporter)
-        if not (reporter.phone or "").strip():
-            raise ValidationError(
-                {"reporter": "请先在个人资料中补齐手机号后再提交报修。"}
-            )
         normalized_location = validate_repair_scope(
             reporter=reporter,
             building=building,
@@ -62,6 +60,13 @@ def _create_ticket_once(
             public_area=public_area,
             public_area_other=public_area_other,
         )
+        reporter = normalized_location["reporter"]
+        building = normalized_location["building"]
+        fault_category = normalized_location["fault_category"]
+        if not (reporter.phone or "").strip():
+            raise ValidationError(
+                {"reporter": "请先在个人资料中补齐手机号后再提交报修。"}
+            )
         number = _next_ticket_number(timezone.localdate())
         ticket = Ticket(
             number=number,

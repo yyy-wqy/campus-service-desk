@@ -148,6 +148,46 @@ class TicketCreationServiceTests(TicketFixtureMixin, TestCase):
         self.assertEqual(ticket.building_name_snapshot, "第一教学楼")
         self.assertEqual(ticket.category_name_snapshot, "水电设施")
 
+    def test_creation_uses_fresh_source_records_for_snapshots(self):
+        stale_teacher = type(self.teacher).objects.get(pk=self.teacher.pk)
+        stale_building = Building.objects.get(pk=self.teaching_building.pk)
+        stale_category = FaultCategory.objects.get(pk=self.category.pk)
+        type(self.teacher).objects.filter(pk=self.teacher.pk).update(
+            real_name="更新后的李老师",
+            phone="13700137001",
+        )
+        Building.objects.filter(pk=self.teaching_building.pk).update(
+            name="更新后的教学楼",
+        )
+        FaultCategory.objects.filter(pk=self.category.pk).update(
+            name="更新后的设备分类",
+            is_teacher_only=True,
+        )
+
+        ticket = self.create_valid_ticket(
+            reporter=stale_teacher,
+            building=stale_building,
+            fault_category=stale_category,
+        )
+
+        self.assertEqual(ticket.contact_name_snapshot, "更新后的李老师")
+        self.assertEqual(ticket.contact_phone_snapshot, "13700137001")
+        self.assertEqual(ticket.building_name_snapshot, "更新后的教学楼")
+        self.assertEqual(ticket.category_name_snapshot, "更新后的设备分类")
+        self.assertTrue(ticket.category_teacher_only_snapshot)
+
+    def test_creation_rechecks_current_phone_instead_of_cached_value(self):
+        stale_student = type(self.student).objects.get(pk=self.student.pk)
+        type(self.student).objects.filter(pk=self.student.pk).update(phone="")
+
+        with self.assertRaises(ValidationError) as context:
+            self.create_valid_ticket(reporter=stale_student)
+
+        self.assertIn("补齐手机号", context.exception.message_dict["reporter"][0])
+        self.assertFalse(Ticket.objects.exists())
+        self.assertFalse(TicketHistory.objects.exists())
+        self.assertFalse(TicketDailySequence.objects.exists())
+
     def test_original_submission_fields_cannot_be_overwritten(self):
         ticket = self.create_valid_ticket()
         ticket.title = "篡改后的标题"
