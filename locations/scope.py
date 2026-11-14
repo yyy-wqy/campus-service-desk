@@ -57,9 +57,16 @@ def validate_repair_scope(
 
     参数与报修表单字段一一对应；校验失败时抛出 ValidationError，
     错误字典的键就是表单字段名，前端可直接显示在对应字段下方。
-    校验通过时返回可直接写入工单的展示信息：
+    校验通过时返回可直接写入工单的展示信息，以及本次校验实际使用的
+    数据库最新对象：
 
-        {"location_kind": "room"|"public_area", "location_detail": "301"}
+        {
+            "location_kind": "room"|"public_area",
+            "location_detail": "301",
+            "reporter": reporter,
+            "building": building,
+            "fault_category": fault_category,
+        }
 
     所有资料都按主键重新读取（身份、住宿、楼栋、类别、公共区域），
     调用方缓存的旧对象不能让停用项或已迁出的宿舍通过校验。
@@ -150,7 +157,13 @@ def validate_repair_scope(
     if errors:
         raise ValidationError(errors)
 
-    return {"location_kind": location_kind, "location_detail": location_detail}
+    return {
+        "location_kind": location_kind,
+        "location_detail": location_detail,
+        "reporter": reporter,
+        "building": building,
+        "fault_category": fault_category,
+    }
 
 
 def active_public_areas():

@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}{{ ticket.number }}｜校园智办{% endblock %}
+
+{% block content %}
+  <section class="page-heading page-heading-row">
+    <div>
+      <p class="eyebrow">{{ ticket.number }}</p>
+      <h1>{{ ticket.title }}</h1>
+      <p>提交于 {{ ticket.created_at|date:'Y-m-d H:i' }}</p>
+    </div>
+    <span class="ticket-status ticket-status-large">{{ ticket.get_status_display }}</span>
+  </section>
+
+  <div class="detail-grid">
+    <article class="surface-card detail-main">
+      <h2>故障描述</h2>
+      <p class="description-text">{{ ticket.description|linebreaksbr }}</p>
+      <h2>位置信息</h2>
+      <dl class="detail-list">
+        <div><dt>楼栋</dt><dd>{{ ticket.building_name_snapshot }}</dd></div>
+        <div><dt>具体位置</dt><dd>{{ ticket.get_location_kind_display }} · {{ ticket.location_detail }}</dd></div>
+        <div><dt>故障类别</dt><dd>{{ ticket.category_name_snapshot }}</dd></div>
+        <div><dt>方便上门时间</dt><dd>{{ ticket.preferred_visit_time|default:'未填写' }}</dd></div>
+      </dl>
+    </article>
+    <aside class="surface-card detail-side">
+      <h2>工单信息</h2>
+      <dl class="detail-list">
+        <div><dt>报修人</dt><dd>{{ ticket.contact_name_snapshot }}</dd></div>
+        <div><dt>联系方式</dt><dd>{{ ticket.contact_phone_snapshot|default:'未填写' }}</dd></div>
+        <div><dt>优先级</dt><dd>{{ ticket.get_priority_display }}</dd></div>
+        <div><dt>当前处理人</dt><dd>{% if ticket.current_assignee %}{{ ticket.current_assignee.real_name|default:ticket.current_assignee.username }}{% else %}待分派{% endif %}</dd></div>
+      </dl>
+    </aside>
+  </div>
+  <div class="form-actions"><a class="button button-secondary" href="{% url 'tickets:list' %}">返回列表</a></div>
+{% endblock %}
