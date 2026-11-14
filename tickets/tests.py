@@ -9,6 +9,7 @@ from django.db import close_old_connections
 from django.test import TestCase, TransactionTestCase
 from django.urls import reverse
 
+from accounts.models import MaintenanceApplication
 from locations.models import (
     Building,
     FaultCategory,
@@ -63,6 +64,8 @@ class TicketFixtureMixin:
             role="maintenance",
             approval_status="approved",
         )
+        for worker in (cls.maintenance, cls.other_maintenance):
+            MaintenanceApplication.objects.create(worker=worker, status=MaintenanceApplication.Status.APPROVED)
         cls.admin = user_model.objects.create_user(
             username="admin-one",
             password="test-password",
@@ -370,6 +373,19 @@ class TicketPermissionTests(TicketFixtureMixin, TestCase):
         self.assertFalse(can_process_ticket(self.other_maintenance, ticket))
         self.assertTrue(can_confirm_ticket(self.student, ticket))
         self.assertFalse(can_confirm_ticket(self.admin, ticket))
+
+    def test_assignment_does_not_grant_access_without_approved_qualification(self):
+        ticket = self.create_valid_ticket()
+        ticket.current_assignee = self.maintenance
+        ticket.save(update_fields=("current_assignee", "updated_at"))
+        for status in ("draft", "pending", "needs_more", "rejected"):
+            with self.subTest(status=status):
+                MaintenanceApplication.objects.filter(worker=self.maintenance).update(status=status)
+                self.assertFalse(can_process_ticket(self.maintenance, ticket))
+        MaintenanceApplication.objects.filter(worker=self.maintenance).update(status="approved")
+        self.assertTrue(can_process_ticket(self.maintenance, ticket))
+        get_user_model().objects.filter(pk=self.maintenance.pk).update(is_active=False)
+        self.assertFalse(can_process_ticket(self.maintenance, ticket))
 
 
 class TicketViewTests(TicketFixtureMixin, TestCase):

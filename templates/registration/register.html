@@ -6,7 +6,7 @@
   <header class="auth-form-heading">
     <p class="eyebrow">账号注册</p>
     <h2>创建新账号</h2>
-    <p>学生注册后即可登录；教师和维修人员需等待管理员审核身份。</p>
+    <p>学生注册后即可登录；教师需审核身份；维修人员先登录提交资质，通过审核后可处理任务。</p>
   </header>
   {% if form.non_field_errors %}<div class="form-alert" role="alert">{{ form.non_field_errors }}</div>{% endif %}
   <form class="login-form" method="post" action="{% url 'accounts:register' %}" data-registration-form>

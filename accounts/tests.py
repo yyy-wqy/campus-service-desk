@@ -5,7 +5,7 @@ from django.http import HttpResponse
 from django.test import Client, TestCase, override_settings
 from django.urls import include, path, reverse
 
-from .models import LoginProtection, User
+from .models import LoginProtection, MaintenanceApplication, User
 from .urls import urlpatterns as account_urls
 
 
@@ -16,12 +16,11 @@ def business_page(request):
     return HttpResponse("business content")
 
 
-# Exercise the middleware against a real resolved business endpoint, without
-# adding placeholder business pages to the application.
 urlpatterns = [
     path("accounts/", include((account_urls + [path("protected/", business_page)], "accounts"))),
     path("", include("core.urls")),
-    path("business/", include(([path("", business_page, name="test")], "tickets"))),
+    path("tickets/", include("tickets.urls")),
+    path("locations/", include("locations.urls")),
 ]
 
 
@@ -105,7 +104,9 @@ class LoginTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         for role in User.Role.values:
-            User.objects.create_user(username=role, password=PASSWORD, role=role, approval_status="approved")
+            user = User.objects.create_user(username=role, password=PASSWORD, role=role, approval_status="approved")
+            if role == "maintenance":
+                MaintenanceApplication.objects.create(worker=user, status="approved", version=1)
 
     def login(self, account="student", **extra):
         return self.client.post(reverse("accounts:login"), {
@@ -326,20 +327,20 @@ class BusinessAccessTests(TestCase):
         cls.user = User.objects.create_user(username="teacher", password=PASSWORD, role="teacher", approval_status="approved")
 
     def test_anonymous_business_request_redirects_to_login(self):
-        response = self.client.get("/business/?page=2")
-        self.assertRedirects(response, reverse("accounts:login") + "?next=/business/%3Fpage%3D2")
+        response = self.client.get(reverse("tickets:list") + "?page=2")
+        self.assertRedirects(response, reverse("accounts:login") + "?next=/tickets/%3Fpage%3D2")
         response = self.client.get("/accounts/protected/")
         self.assertRedirects(response, reverse("accounts:login") + "?next=/accounts/protected/")
 
     def test_approved_account_can_access_business_page(self):
         self.client.force_login(self.user)
-        self.assertContains(self.client.get("/business/"), "business content")
+        self.assertContains(self.client.get(reverse("tickets:list")), "我的工单")
 
     def test_existing_session_is_blocked_after_review_status_changes(self):
         self.client.force_login(self.user)
         for status in ("pending", "rejected", "invalid"):
             User.objects.filter(pk=self.user.pk).update(approval_status=status, approval_reason="需补充资料")
-            for url in ("/", "/business/", "/accounts/protected/"):
+            for url in ("/", reverse("tickets:list"), "/accounts/protected/"):
                 with self.subTest(status=status, url=url):
                     response = self.client.get(url)
                     self.assertEqual(response.status_code, 403)
@@ -354,4 +355,4 @@ class BusinessAccessTests(TestCase):
     def test_unknown_role_is_blocked(self):
         User.objects.filter(pk=self.user.pk).update(role="unknown")
         self.client.force_login(self.user)
-        self.assertEqual(self.client.get("/business/").status_code, 403)
+        self.assertEqual(self.client.get(reverse("tickets:list")).status_code, 403)
