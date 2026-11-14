@@ -15,10 +15,8 @@ def ticket_create(request):
     if not can_create_ticket(request.user):
         return HttpResponseForbidden("当前账号无权提交报修工单。")
 
-    form = TicketCreateForm(
-        request.POST or None,
-        reporter=request.user,
-    )
+    form_data = request.POST if request.method == "POST" else None
+    form = TicketCreateForm(form_data, reporter=request.user)
     if request.method == "POST" and form.is_valid():
         try:
             ticket = form.save()

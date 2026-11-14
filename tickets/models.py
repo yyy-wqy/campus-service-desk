@@ -22,6 +22,22 @@ class TicketDailySequence(models.Model):
 
 
 class TicketQuerySet(models.QuerySet):
+    def update(self, **kwargs):
+        immutable_fields = set(self.model.IMMUTABLE_FIELDS)
+        for field in self.model._meta.concrete_fields:
+            if field.attname in immutable_fields:
+                immutable_fields.add(field.name)
+
+        blocked_fields = sorted(immutable_fields.intersection(kwargs))
+        if blocked_fields:
+            raise ValidationError(
+                {
+                    field: "工单原始报修信息提交后不可覆盖。"
+                    for field in blocked_fields
+                }
+            )
+        return super().update(**kwargs)
+
     def visible_to(self, user):
         if not getattr(user, "is_authenticated", False):
             return self.none()

@@ -198,6 +198,37 @@ class TicketCreationServiceTests(TicketFixtureMixin, TestCase):
         ticket.refresh_from_db()
         self.assertEqual(ticket.title, "走廊灯具损坏")
 
+    def test_queryset_update_rejects_original_and_snapshot_fields(self):
+        ticket = self.create_valid_ticket()
+
+        for field, value in (
+            ("title", "批量篡改后的标题"),
+            ("contact_phone_snapshot", "13900139000"),
+            ("building_id", self.dorm_building.pk),
+            ("building", self.dorm_building),
+        ):
+            with self.subTest(field=field):
+                with self.assertRaises(ValidationError):
+                    Ticket.objects.filter(pk=ticket.pk).update(**{field: value})
+
+        ticket.refresh_from_db()
+        self.assertEqual(ticket.title, "走廊灯具损坏")
+        self.assertEqual(ticket.contact_phone_snapshot, "13800138000")
+        self.assertEqual(ticket.building, self.teaching_building)
+
+    def test_queryset_update_allows_mutable_workflow_fields(self):
+        ticket = self.create_valid_ticket()
+
+        updated = Ticket.objects.filter(pk=ticket.pk).update(
+            status=Ticket.Status.PENDING_WORK,
+            priority=Ticket.Priority.URGENT,
+        )
+
+        self.assertEqual(updated, 1)
+        ticket.refresh_from_db()
+        self.assertEqual(ticket.status, Ticket.Status.PENDING_WORK)
+        self.assertEqual(ticket.priority, Ticket.Priority.URGENT)
+
     def test_daily_sequence_exhaustion_has_no_partial_ticket(self):
         business_date = date(2026, 11, 5)
         TicketDailySequence.objects.create(
@@ -382,6 +413,28 @@ class TicketViewTests(TicketFixtureMixin, TestCase):
         response = self.client.post(reverse("tickets:create"), data)
 
         self.assertEqual(response.status_code, 200)
+        self.assertFalse(Ticket.objects.exists())
+        self.assertFalse(TicketDailySequence.objects.exists())
+        self.assertFalse(TicketHistory.objects.exists())
+
+    def test_empty_submission_shows_required_errors_without_creating_ticket(self):
+        self.client.force_login(self.student)
+
+        response = self.client.post(reverse("tickets:create"), {})
+
+        self.assertEqual(response.status_code, 200)
+        form = response.context["form"]
+        for field in (
+            "building",
+            "fault_category",
+            "title",
+            "description",
+            "location_kind",
+        ):
+            with self.subTest(field=field):
+                self.assertIn(field, form.errors)
+                self.assertIn("这个字段是必填项。", form.errors[field])
+        self.assertContains(response, "这个字段是必填项。")
         self.assertFalse(Ticket.objects.exists())
         self.assertFalse(TicketDailySequence.objects.exists())
         self.assertFalse(TicketHistory.objects.exists())
