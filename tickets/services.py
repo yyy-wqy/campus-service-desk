@@ -5,8 +5,7 @@ from django.db import DatabaseError, OperationalError, transaction
 from django.db.models import F
 from django.utils import timezone
 
-from accounts.models import User
-from locations.models import Building, FaultCategory
+from locations.scope import validate_repair_scope
 
 from .models import Ticket, TicketDailySequence, TicketHistory
 from .permissions import can_transition_ticket, require_create_permission
@@ -18,29 +17,6 @@ class TicketNumberExhausted(ValidationError):
 
 class TicketCreationFailed(ValidationError):
     pass
-
-
-def validate_submission_scope(reporter, building, fault_category):
-    require_create_permission(reporter)
-    errors = {}
-    if not (reporter.phone or "").strip():
-        errors["reporter"] = "请先在个人资料中补齐手机号后再提交报修。"
-    if not building.is_active:
-        errors["building"] = "该楼栋已停用，请重新选择。"
-    if not fault_category.is_active:
-        errors["fault_category"] = "该故障类别已停用，请重新选择。"
-
-    if reporter.role == User.Role.TEACHER and building.building_type != "teach":
-        errors["building"] = "教师只能提交教学楼报修。"
-    if reporter.role == User.Role.STUDENT:
-        if fault_category.is_teacher_only:
-            errors["fault_category"] = "该故障类别仅限教师报修。"
-        if building.building_type == "dorm":
-            # Issue #19 尚未提供住宿档案；在其接入前不能仅凭表单选择宿舍楼。
-            errors["building"] = "宿舍报修需先完成住宿信息绑定。"
-
-    if errors:
-        raise ValidationError(errors)
 
 
 def _next_ticket_number(business_date):
@@ -66,11 +42,26 @@ def _create_ticket_once(
     title,
     description,
     location_kind,
-    location_detail,
+    room_number="",
+    public_area=None,
+    public_area_other="",
     preferred_visit_time="",
 ):
     with transaction.atomic():
-        validate_submission_scope(reporter, building, fault_category)
+        require_create_permission(reporter)
+        if not (reporter.phone or "").strip():
+            raise ValidationError(
+                {"reporter": "请先在个人资料中补齐手机号后再提交报修。"}
+            )
+        normalized_location = validate_repair_scope(
+            reporter=reporter,
+            building=building,
+            fault_category=fault_category,
+            location_kind=location_kind,
+            room_number=room_number,
+            public_area=public_area,
+            public_area_other=public_area_other,
+        )
         number = _next_ticket_number(timezone.localdate())
         ticket = Ticket(
             number=number,
@@ -79,8 +70,8 @@ def _create_ticket_once(
             fault_category=fault_category,
             title=title,
             description=description,
-            location_kind=location_kind,
-            location_detail=location_detail,
+            location_kind=normalized_location["location_kind"],
+            location_detail=normalized_location["location_detail"],
             preferred_visit_time=preferred_visit_time,
             contact_name_snapshot=reporter.real_name or reporter.username,
             contact_phone_snapshot=reporter.phone,

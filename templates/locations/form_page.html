@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}{{ page_title }} | 校园智办{% endblock %}
+{% block content %}
+<h1>{{ page_title }}</h1>
+<form method="post" class="login-form">
+{% csrf_token %}
+{% include "registration/recovery_fields.html" %}
+<button class="button button-primary" type="submit">保存</button>
+<a class="text-link" href="{% url 'locations:manage' %}">返回基础资料管理</a>
+</form>
+{% endblock %}

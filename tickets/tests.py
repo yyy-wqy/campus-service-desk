@@ -9,7 +9,12 @@ from django.db import close_old_connections
 from django.test import TestCase, TransactionTestCase
 from django.urls import reverse
 
-from locations.models import Building, FaultCategory
+from locations.models import (
+    Building,
+    FaultCategory,
+    PublicAreaOption,
+    StudentHousing,
+)
 
 from .models import Ticket, TicketDailySequence, TicketHistory
 from .permissions import (
@@ -83,6 +88,10 @@ class TicketFixtureMixin:
             name="多媒体设备",
             is_teacher_only=True,
         )
+        cls.corridor, _ = PublicAreaOption.objects.get_or_create(
+            name="走廊",
+            defaults={"sort_order": 1},
+        )
 
     def create_valid_ticket(self, **overrides):
         values = {
@@ -91,8 +100,8 @@ class TicketFixtureMixin:
             "fault_category": self.category,
             "title": "走廊灯具损坏",
             "description": "三楼东侧灯具无法点亮。",
-            "location_kind": Ticket.LocationKind.PUBLIC_AREA,
-            "location_detail": "三楼东侧走廊",
+            "location_kind": Ticket.LocationKind.ROOM,
+            "room_number": "A301",
             "preferred_visit_time": "工作日 14:00 后",
         }
         values.update(overrides)
@@ -197,6 +206,25 @@ class TicketCreationServiceTests(TicketFixtureMixin, TestCase):
                     self.create_valid_ticket(**overrides)
         self.assertFalse(Ticket.objects.exists())
 
+    def test_creation_service_enforces_current_student_housing(self):
+        StudentHousing.objects.create(
+            student=self.student,
+            building=self.dorm_building,
+        )
+        own_dorm_ticket = self.create_valid_ticket(building=self.dorm_building)
+        other_dorm = Building.objects.create(
+            name="服务层越界宿舍",
+            building_type="dorm",
+        )
+
+        with self.assertRaises(ValidationError) as context:
+            self.create_valid_ticket(building=other_dorm)
+
+        self.assertIn("building", context.exception.message_dict)
+        self.assertEqual(Ticket.objects.count(), 1)
+        self.assertEqual(TicketHistory.objects.count(), 1)
+        self.assertEqual(own_dorm_ticket.building, self.dorm_building)
+
     def test_history_is_append_only(self):
         ticket = self.create_valid_ticket()
         history = ticket.history.get()
@@ -281,7 +309,9 @@ class TicketViewTests(TicketFixtureMixin, TestCase):
             "title": "门锁损坏",
             "description": "教室前门无法正常上锁。",
             "location_kind": Ticket.LocationKind.ROOM,
-            "location_detail": "A301",
+            "room_number": "A301",
+            "public_area": "",
+            "public_area_other": "",
             "preferred_visit_time": "下午",
         }
 
@@ -315,6 +345,71 @@ class TicketViewTests(TicketFixtureMixin, TestCase):
         self.assertFalse(Ticket.objects.exists())
         self.assertFalse(TicketDailySequence.objects.exists())
         self.assertFalse(TicketHistory.objects.exists())
+
+    def test_student_can_create_ticket_for_own_dorm_room(self):
+        StudentHousing.objects.create(
+            student=self.student,
+            building=self.dorm_building,
+        )
+        self.client.force_login(self.student)
+        data = self.valid_form_data()
+        data["building"] = self.dorm_building.pk
+
+        response = self.client.post(reverse("tickets:create"), data)
+
+        ticket = Ticket.objects.get()
+        self.assertRedirects(response, reverse("tickets:detail", args=(ticket.pk,)))
+        self.assertEqual(ticket.building, self.dorm_building)
+        self.assertEqual(ticket.location_kind, Ticket.LocationKind.ROOM)
+        self.assertEqual(ticket.location_detail, "A301")
+
+    def test_student_cannot_forge_another_dorm(self):
+        StudentHousing.objects.create(
+            student=self.student,
+            building=self.dorm_building,
+        )
+        other_dorm = Building.objects.create(
+            name="学生二舍",
+            building_type="dorm",
+        )
+        self.client.force_login(self.student)
+        data = self.valid_form_data()
+        data["building"] = other_dorm.pk
+
+        response = self.client.post(reverse("tickets:create"), data)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "选择一个有效的选项")
+        self.assertFalse(Ticket.objects.exists())
+        self.assertFalse(TicketHistory.objects.exists())
+        self.assertFalse(TicketDailySequence.objects.exists())
+
+    def test_invalid_public_area_option_and_forged_text_are_rejected(self):
+        self.client.force_login(self.student)
+        data = self.valid_form_data()
+        data.update(
+            {
+                "location_kind": Ticket.LocationKind.PUBLIC_AREA,
+                "room_number": "",
+                "public_area": 10**9,
+            }
+        )
+
+        response = self.client.post(reverse("tickets:create"), data)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "选择一个有效的选项")
+        self.assertFalse(Ticket.objects.exists())
+
+        data["public_area"] = self.corridor.pk
+        data["public_area_other"] = "伪造的公共区域文本"
+        response = self.client.post(reverse("tickets:create"), data)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "该公共区域不是“其他”选项")
+        self.assertFalse(Ticket.objects.exists())
+        self.assertFalse(TicketHistory.objects.exists())
+        self.assertFalse(TicketDailySequence.objects.exists())
 
     def test_missing_phone_shows_actionable_error_without_allocating_number(self):
         user_model = get_user_model()
@@ -494,8 +589,8 @@ class ConcurrentTicketNumberTests(TransactionTestCase):
                 fault_category=self.category,
                 title=f"并发工单 {index}",
                 description="并发编号测试",
-                location_kind=Ticket.LocationKind.PUBLIC_AREA,
-                location_detail=f"测试位置 {index}",
+                location_kind=Ticket.LocationKind.ROOM,
+                room_number=f"A{index + 1:03d}",
             )
             return ticket.number
         finally:

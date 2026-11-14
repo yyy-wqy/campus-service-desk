@@ -1,10 +1,16 @@
 from django import forms
 from django.core.exceptions import ValidationError
 
-from locations.models import Building, FaultCategory
+from locations.models import Building, FaultCategory, PublicAreaOption
+from locations.scope import (
+    active_public_areas,
+    reportable_buildings,
+    reportable_categories,
+    validate_repair_scope,
+)
 
 from .models import Ticket
-from .services import create_ticket, validate_submission_scope
+from .services import create_ticket
 
 
 class TicketCreateForm(forms.Form):
@@ -27,7 +33,25 @@ class TicketCreateForm(forms.Form):
         label="位置类型",
         choices=Ticket.LocationKind.choices,
     )
-    location_detail = forms.CharField(label="房间或公共区域", max_length=120)
+    room_number = forms.CharField(
+        label="房间号",
+        max_length=20,
+        required=False,
+        help_text="位置类型选择“房间”时填写。",
+    )
+    public_area = forms.ModelChoiceField(
+        label="公共区域",
+        queryset=PublicAreaOption.objects.none(),
+        empty_label="请选择公共区域",
+        required=False,
+        help_text="位置类型选择“公共区域”时填写。",
+    )
+    public_area_other = forms.CharField(
+        label="其他公共区域",
+        max_length=50,
+        required=False,
+        help_text="仅在公共区域选择“其他”时填写。",
+    )
     preferred_visit_time = forms.CharField(
         label="方便上门时间",
         max_length=120,
@@ -37,14 +61,13 @@ class TicketCreateForm(forms.Form):
     def __init__(self, *args, reporter, **kwargs):
         super().__init__(*args, **kwargs)
         self.reporter = reporter
-        buildings = Building.objects.filter(is_active=True)
-        categories = FaultCategory.objects.filter(is_active=True)
-        if reporter.role == "teacher":
-            buildings = buildings.filter(building_type="teach")
-        elif reporter.role == "student":
-            categories = categories.filter(is_teacher_only=False)
-        self.fields["building"].queryset = buildings.order_by("name")
-        self.fields["fault_category"].queryset = categories.order_by("name")
+        self.fields["building"].queryset = reportable_buildings(reporter).order_by(
+            "name"
+        )
+        self.fields["fault_category"].queryset = reportable_categories(
+            reporter
+        ).order_by("name")
+        self.fields["public_area"].queryset = active_public_areas()
 
     def clean(self):
         cleaned = super().clean()
@@ -52,7 +75,15 @@ class TicketCreateForm(forms.Form):
         category = cleaned.get("fault_category")
         if building and category:
             try:
-                validate_submission_scope(self.reporter, building, category)
+                validate_repair_scope(
+                    reporter=self.reporter,
+                    building=building,
+                    fault_category=category,
+                    location_kind=cleaned.get("location_kind"),
+                    room_number=cleaned.get("room_number", ""),
+                    public_area=cleaned.get("public_area"),
+                    public_area_other=cleaned.get("public_area_other", ""),
+                )
             except ValidationError as exc:
                 self.add_service_error(exc)
         return cleaned
@@ -78,6 +109,8 @@ class TicketCreateForm(forms.Form):
             title=self.cleaned_data["title"],
             description=self.cleaned_data["description"],
             location_kind=self.cleaned_data["location_kind"],
-            location_detail=self.cleaned_data["location_detail"],
+            room_number=self.cleaned_data["room_number"],
+            public_area=self.cleaned_data["public_area"],
+            public_area_other=self.cleaned_data["public_area_other"],
             preferred_visit_time=self.cleaned_data["preferred_visit_time"],
         )

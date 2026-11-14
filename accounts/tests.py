@@ -5,7 +5,7 @@ from django.http import HttpResponse
 from django.test import Client, TestCase, override_settings
 from django.urls import include, path, reverse
 
-from .models import User
+from .models import LoginProtection, User
 from .urls import urlpatterns as account_urls
 
 
@@ -28,7 +28,7 @@ urlpatterns = [
 class RegistrationTests(TestCase):
     def payload(self, **extra):
         return {
-            "username": "202610150001", "real_name": "测试用户",
+            "username": "202610150001", "real_name": "测试用户", "department": "测试部门",
             "phone": "13800138000", "role": "student",
             "password1": PASSWORD, "password2": PASSWORD, **extra,
         }
@@ -51,7 +51,7 @@ class RegistrationTests(TestCase):
                     is_staff="true", is_superuser="true", approval_reason="forged",
                 ), follow=True)
                 self.assertRedirects(response, reverse("accounts:login"))
-                user = User.objects.get(username=username)
+                user = User.objects.get(phone=phone)
                 self.assertEqual(user.role, role)
                 expected = "approved" if role == "student" else "pending"
                 self.assertEqual(user.approval_status, expected)
@@ -220,6 +220,8 @@ class LoginFailureMessageTests(TestCase):
         )
 
     def assert_login_failure(self, username, password, message=None, code=None):
+        # Each case checks a distinct validation outcome, not a guessing sequence.
+        LoginProtection.objects.filter(username=username).delete()
         response = self.client.post(reverse("accounts:login"), {
             "username": username, "password": password,
         })

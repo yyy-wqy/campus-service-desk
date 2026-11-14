@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}教师审核 | 校园智办{% endblock %}
+{% block content %}
+<h1>教师审核</h1>
+{% if teacher %}
+<p>姓名：{{ teacher.real_name }} · 工号：{{ teacher.username }}</p>
+<p>院系/部门：{{ teacher.department|default:'未填写，可线下核验' }} · 联系方式：{{ teacher.phone }}</p>
+<p>状态：{{ teacher.get_approval_status_display }}</p>
+<form method="post" class="login-form">{% csrf_token %}{% include "registration/recovery_fields.html" %}
+<button type="submit" class="button button-primary">提交审核</button></form>
+<h2>审核历史</h2>
+{% for record in history %}<p>{{ record.created_at|date:'Y-m-d H:i:s' }} · {{ record.reviewer.username }} · {{ record.get_result_display }} · {{ record.reason|default:'无补充说明' }}</p>{% empty %}<p>暂无记录</p>{% endfor %}
+<a href="{% url 'accounts:reviews' %}">返回教师列表</a>
+{% else %}
+{% for item in teachers %}<p><a href="{% url 'accounts:teacher_review' item.pk %}">{{ item.username }} · {{ item.real_name }} · {{ item.get_approval_status_display }}</a></p>{% empty %}<p>暂无教师账号</p>{% endfor %}
+{% endif %}
+{% endblock %}

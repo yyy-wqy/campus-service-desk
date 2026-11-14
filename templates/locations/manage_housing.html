@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}修改学生住宿楼栋 | 校园智办{% endblock %}
+{% block content %}
+<h1>修改学生住宿楼栋</h1>
+<p class="field-help">管理员修改不计入学生的自助次数，也不重置学生的 30 天冷却；每次修改都会记录操作人、时间和前后楼栋。</p>
+
+<form method="post" class="login-form">
+{% csrf_token %}
+{% include "registration/recovery_fields.html" %}
+<button class="button button-primary" type="submit">保存住宿楼栋</button>
+<a class="text-link" href="{% url 'locations:manage' %}">返回基础资料管理</a>
+</form>
+
+<h2>当前住宿档案</h2>
+{% if assignments %}
+<table class="data-table">
+  <thead><tr><th>学生</th><th>住宿楼栋</th><th>最近自助变更</th><th>更新时间</th></tr></thead>
+  <tbody>
+    {% for item in assignments %}
+      <tr>
+        <td>{{ item.student.real_name|default:item.student.username }}（{{ item.student.username }}）</td>
+        <td>{{ item.building.name }}</td>
+        <td>{{ item.last_self_change_at|date:"Y-m-d H:i"|default:"未自助变更" }}</td>
+        <td>{{ item.updated_at|date:"Y-m-d H:i" }}</td>
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+  <p>还没有学生填写住宿信息。</p>
+{% endif %}
+
+<h2>最近变更记录</h2>
+{% if logs %}
+<table class="data-table">
+  <thead><tr><th>时间</th><th>学生</th><th>原楼栋</th><th>新楼栋</th><th>来源</th><th>操作人</th></tr></thead>
+  <tbody>
+    {% for item in logs %}
+      <tr>
+        <td>{{ item.created_at|date:"Y-m-d H:i" }}</td>
+        <td>{{ item.student.real_name|default:item.student.username }}</td>
+        <td>{{ item.from_building_name|default:"未填写" }}</td>
+        <td>{{ item.to_building_name }}</td>
+        <td>{{ item.get_source_display }}</td>
+        <td>{{ item.actor.real_name|default:item.actor.username }}</td>
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+  <p>暂无变更记录。</p>
+{% endif %}
+{% endblock %}
