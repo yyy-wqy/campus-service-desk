@@ -93,9 +93,11 @@ def retire_material(material, worker):
 
 
 @transaction.atomic
-def review_application(application_id, actor, result, reason):
+def review_application(application_id, actor, result, reason, version):
     require_admin(actor)
     app = lock_application(application_id)
+    if app.version != version:
+        raise ValidationError("申请材料已更新，请刷新页面并重新核验。")
     if app.status != Application.Status.PENDING or not app.worker.is_active:
         raise ValidationError("仅可审核启用账号的待审核申请。")
     if result not in {"approved", "needs_more", "rejected"}:

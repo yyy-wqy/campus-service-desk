@@ -10,7 +10,7 @@ from accounts.models import MaintenanceApplication, MaintenanceMaterial
 from locations.models import Building, FaultCategory
 
 from .models import Ticket, TicketHistory
-from .permissions import visible_tickets
+from .permissions import can_process_ticket, can_view_ticket, visible_tickets
 from .services import (
     TicketOperationFailed,
     accept_and_assign_ticket,
@@ -281,6 +281,36 @@ class AdminTicketWorkflowTests(TestCase):
             )
         assigned.refresh_from_db()
         self.assertEqual(assigned.current_assignee, worker)
+
+    def test_assigned_worker_loses_visibility_and_processing_when_qualification_changes(self):
+        worker = self.create_worker("qualification-changed-worker")
+        assigned = accept_and_assign_ticket(
+            ticket=self.ticket,
+            actor=self.admin,
+            worker=worker,
+        )
+        history_count = assigned.history.count()
+
+        MaintenanceApplication.objects.filter(worker=worker).update(
+            status=MaintenanceApplication.Status.NEEDS_MORE
+        )
+
+        self.assertEqual(worker.approval_status, "approved")
+        self.assertFalse(can_view_ticket(worker, assigned))
+        self.assertFalse(can_process_ticket(worker, assigned))
+        self.assertFalse(visible_tickets(worker).filter(pk=assigned.pk).exists())
+        self.assertFalse(
+            Ticket.objects.visible_to(worker).filter(pk=assigned.pk).exists()
+        )
+        with self.assertRaises(PermissionDenied):
+            transition_ticket(
+                ticket=assigned,
+                actor=worker,
+                to_status=Ticket.Status.IN_PROGRESS,
+            )
+        assigned.refresh_from_db()
+        self.assertEqual(assigned.status, Ticket.Status.PENDING_WORK)
+        self.assertEqual(assigned.history.count(), history_count)
 
     def test_unqualified_inactive_or_nonmaintenance_accounts_cannot_be_assigned(self):
         invalid_workers = (

@@ -104,7 +104,10 @@ def download(request, material_id):
 def review(request, application_id=None):
     require_admin(request.user)
     app = get_object_or_404(Application.objects.select_related("worker"), pk=application_id) if application_id else None
-    form = MaintenanceReviewForm(request.POST if request.method == "POST" else None)
+    form = MaintenanceReviewForm(
+        request.POST if request.method == "POST" else None,
+        initial={"version": app.version} if app else None,
+    )
     if request.method == "POST" and app and form.is_valid():
         try:
             review_application(app.pk, request.user, **form.cleaned_data)

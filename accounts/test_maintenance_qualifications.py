@@ -144,10 +144,19 @@ class MaintenanceWorkflowTests(PrivateMaterialSetup, TestCase):
         self.client.force_login(self.admin)
         url = reverse("accounts:maintenance_review", args=[self.app.pk])
         for result in ("needs_more", "rejected"):
-            response = self.client.post(url, {"result": result, "reason": " "})
+            response = self.client.post(
+                url,
+                {"version": 1, "result": result, "reason": " "},
+            )
             self.assertIn("reason", response.context["form"].errors)
         self.assertFalse(MaintenanceReview.objects.exists())
-        self.assertRedirects(self.client.post(url, {"result": "needs_more", "reason": "请提供清晰证书"}), url)
+        self.assertRedirects(
+            self.client.post(
+                url,
+                {"version": 1, "result": "needs_more", "reason": "请提供清晰证书"},
+            ),
+            url,
+        )
         first = MaintenanceReview.objects.get()
         self.assertEqual(set(first.materials.values_list("pk", flat=True)), {employment.pk, old.pk})
         self.assertEqual((first.reviewer, first.result, first.version), (self.admin, "needs_more", 1))
@@ -166,7 +175,10 @@ class MaintenanceWorkflowTests(PrivateMaterialSetup, TestCase):
         self.assertTrue(private_storage().exists(old.storage_name))
         self.assertEqual(self.client.get("/business/").status_code, 403)
         self.client.force_login(self.admin)
-        self.client.post(url, {"result": "approved", "reason": "人工核验通过"})
+        self.client.post(
+            url,
+            {"version": 2, "result": "approved", "reason": "人工核验通过"},
+        )
         records = list(MaintenanceReview.objects.order_by("pk"))
         self.assertEqual([r.result for r in records], ["needs_more", "approved"])
         self.assertEqual(set(records[1].materials.values_list("pk", flat=True)), {employment.pk, replacement.pk})
@@ -244,18 +256,82 @@ class MaintenanceWorkflowTests(PrivateMaterialSetup, TestCase):
         self.assertEqual(self.client.get("/business/").status_code, 403)
         self.client.force_login(self.admin)
         review_url = reverse("accounts:maintenance_review", args=[self.app.pk])
-        response = self.client.post(review_url, {"result": "approved", "reason": "线下核验完成"})
+        response = self.client.post(
+            review_url,
+            {"version": 1, "result": "approved", "reason": "线下核验完成"},
+        )
         self.assertRedirects(response, review_url)
         self.assertContains(self.client.get(review_url), "供电维护")
         self.client.logout()
         self.assertRedirects(self.login_worker(), "/business/")
         self.assertEqual(self.client.get("/business/").status_code, 200)
 
+    def test_stale_review_page_cannot_approve_a_new_submission_round(self):
+        employment, old = self.pending()
+        stale_version = 1
+        second_admin = User.objects.create_user(
+            username="second-reviewer",
+            role="admin",
+            approval_status="approved",
+        )
+        review_url = reverse("accounts:maintenance_review", args=[self.app.pk])
+        self.client.force_login(self.admin)
+        stale_page = self.client.get(review_url)
+        self.assertContains(stale_page, 'name="version" value="1"', html=False)
+
+        review_application(
+            self.app.pk,
+            second_admin,
+            "needs_more",
+            "请替换专业资质附件",
+            stale_version,
+        )
+        retire_material(old, self.worker)
+        replacement = self.material("qualification")
+        submit_application(self.app.pk, self.worker)
+
+        stale_response = self.client.post(
+            review_url,
+            {
+                "version": stale_version,
+                "result": "approved",
+                "reason": "旧页面直接通过",
+            },
+        )
+
+        self.assertEqual(stale_response.status_code, 200)
+        self.assertContains(stale_response, "申请材料已更新，请刷新页面并重新核验")
+        self.app.refresh_from_db()
+        self.worker.refresh_from_db()
+        self.assertEqual((self.app.status, self.app.version), ("pending", 2))
+        self.assertEqual(self.worker.approval_status, "pending")
+        self.assertEqual(
+            list(self.app.reviews.values_list("result", flat=True)),
+            ["needs_more"],
+        )
+
+        fresh_page = self.client.get(review_url)
+        self.assertContains(fresh_page, 'name="version" value="2"', html=False)
+        approved = self.client.post(
+            review_url,
+            {"version": 2, "result": "approved", "reason": "重新核验通过"},
+        )
+        self.assertRedirects(approved, review_url)
+        reviews = list(self.app.reviews.order_by("pk"))
+        self.assertEqual([review.result for review in reviews], ["needs_more", "approved"])
+        self.assertEqual(
+            set(reviews[1].materials.values_list("pk", flat=True)),
+            {employment.pk, replacement.pk},
+        )
+
     def test_rejection_and_formal_deactivation_are_recorded_and_prevent_business(self):
         self.pending()
         self.client.force_login(self.admin)
         review_url = reverse("accounts:maintenance_review", args=[self.app.pk])
-        self.client.post(review_url, {"result": "rejected", "reason": "证明与申请人不符"})
+        self.client.post(
+            review_url,
+            {"version": 1, "result": "rejected", "reason": "证明与申请人不符"},
+        )
         self.app.refresh_from_db(); self.worker.refresh_from_db()
         self.assertEqual((self.app.status, self.worker.approval_status), ("rejected", "rejected"))
         self.assertEqual(MaintenanceReview.objects.get().reason, "证明与申请人不符")
@@ -340,17 +416,23 @@ class MaintenanceWorkflowTests(PrivateMaterialSetup, TestCase):
             submit_application(self.app.pk, self.worker)
         Application.objects.filter(pk=self.app.pk).update(status="pending")
         with self.assertRaises(ValidationError):
-            review_application(self.app.pk, self.admin, "approved", "")
+            review_application(self.app.pk, self.admin, "approved", "", 0)
         self.assertFalse(MaintenanceReview.objects.exists())
 
     def test_missing_file_still_allows_admin_to_request_replacement_and_finish_review(self):
         employment, _ = self.pending()
         private_storage().delete(employment.storage_name)
-        review_application(self.app.pk, self.admin, "needs_more", "附件缺失，请重新上传")
+        review_application(
+            self.app.pk,
+            self.admin,
+            "needs_more",
+            "附件缺失，请重新上传",
+            1,
+        )
         retire_material(employment, self.worker)
         self.material()
         submit_application(self.app.pk, self.worker)
-        review_application(self.app.pk, self.admin, "approved", "重新核验完成")
+        review_application(self.app.pk, self.admin, "approved", "重新核验完成", 2)
         self.assertEqual(list(self.app.reviews.order_by("id").values_list("result", flat=True)), ["needs_more", "approved"])
 
 

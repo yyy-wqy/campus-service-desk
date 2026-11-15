@@ -85,6 +85,11 @@ class MaterialForm(forms.ModelForm):
 
 
 class MaintenanceReviewForm(forms.Form):
+    version = forms.IntegerField(
+        label="审核轮次",
+        min_value=0,
+        widget=forms.HiddenInput,
+    )
     result = forms.ChoiceField(label="审核结果", choices=[("approved", "通过"), ("needs_more", "要求补充"), ("rejected", "拒绝")])
     reason = forms.CharField(label="审核说明（补充或拒绝必填）", required=False, widget=forms.Textarea)
 
