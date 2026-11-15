@@ -238,3 +238,56 @@ class TicketQueryHistoryTests(TestCase):
         )
         self.assertContains(response, "&lt;script&gt;")
         self.assertNotContains(response, "<script>alert(1)</script>")
+
+    def test_real_transitions_show_statuses_without_descriptions(self):
+        from .services import transition_ticket
+
+        ticket = Ticket.objects.get(pk=self.second.pk)
+        steps = [
+            ("worker_a", Ticket.Status.IN_PROGRESS),
+            ("worker_a", Ticket.Status.PENDING_CONFIRMATION),
+            ("student_a", Ticket.Status.IN_PROGRESS),
+            ("worker_a", Ticket.Status.PENDING_CONFIRMATION),
+            ("student_a", Ticket.Status.COMPLETED),
+        ]
+        for actor_name, status in steps:
+            ticket = transition_ticket(
+                ticket=ticket,
+                actor=self.users[actor_name],
+                to_status=status,
+            )
+
+        records = list(
+            ticket.history.filter(event_type="status_changed")
+            .order_by("created_at", "pk")
+        )
+        self.assertEqual(
+            [(record.from_status, record.to_status) for record in records],
+            [
+                ("pending_work", "in_progress"),
+                ("in_progress", "pending_confirmation"),
+                ("pending_confirmation", "in_progress"),
+                ("in_progress", "pending_confirmation"),
+                ("pending_confirmation", "completed"),
+            ],
+        )
+        self.assertTrue(all(record.description == "" for record in records))
+        self.assertEqual(
+            [record.actor_id for record in records],
+            [self.users[name].pk for name, _ in steps],
+        )
+        self.client.force_login(self.users["student_a"])
+        response = self.client.get(
+            reverse("tickets:detail", args=[ticket.pk])
+        )
+        for text, count in (
+            ("— → 待受理", 1),
+            ("待处理 → 处理中", 1),
+            ("处理中 → 待报修人确认", 2),
+            ("待报修人确认 → 处理中", 1),
+            ("待报修人确认 → 已完成", 1),
+        ):
+            self.assertContains(
+                response, f"<p>状态：{text}</p>", count=count, html=True
+            )
+        self.assertEqual(ticket.status, Ticket.Status.COMPLETED)

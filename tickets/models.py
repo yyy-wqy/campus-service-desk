@@ -236,6 +236,16 @@ class TicketHistory(models.Model):
             models.Index(fields=("ticket", "created_at"), name="ticket_history_time_idx")
         ]
 
+    def get_from_status_display(self):
+        return dict(Ticket.Status.choices).get(
+            self.from_status, self.from_status or "—"
+        )
+
+    def get_to_status_display(self):
+        return dict(Ticket.Status.choices).get(
+            self.to_status, self.to_status or "—"
+        )
+
     def __str__(self):
         return f"{self.ticket.number} {self.get_event_type_display()}"
 

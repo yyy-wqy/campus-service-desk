@@ -12,7 +12,7 @@ from .permissions import can_view_ticket
 
 MAX_NOTE_LENGTH = 2000
 
-# 工作方案：终态只读，最终以组长确认的规则为准。
+# 已由组长确认：有权限者可在非终态追加；取消待审不冻结说明，终态只读。
 NOTE_ALLOWED_STATUSES = {
     Ticket.Status.PENDING_ACCEPTANCE,
     Ticket.Status.PENDING_WORK,

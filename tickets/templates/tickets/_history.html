@@ -13,6 +13,9 @@
           记录人：{{ event.actor.real_name|default:event.actor.username }}
           （{{ event.actor.username }}）
         </p>
+        {% if event.from_status or event.to_status %}
+          <p>状态：{{ event.get_from_status_display }} → {{ event.get_to_status_display }}</p>
+        {% endif %}
         <div class="description-text">
           {{ event.description|default:'无补充说明'|linebreaksbr }}
         </div>
