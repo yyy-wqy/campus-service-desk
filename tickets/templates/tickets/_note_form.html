@@ -1,0 +1,24 @@
+<section class="surface-card">
+  <h2>追加说明</h2>
+  {{ note_form.non_field_errors }}
+  {% if can_add_note %}
+    <p>可补充现场情况或更正信息。说明不能代替维修结果、完成确认或取消审核。</p>
+    {% if ticket.cancellation_pending %}
+      <p>取消申请正在审核，仍可补充情况。</p>
+    {% endif %}
+    <form method="post"
+          action="{% url 'tickets:add_note' ticket.pk %}"
+          class="ticket-form">
+      {% csrf_token %}
+      <div class="field-group">
+        {{ note_form.text.label_tag }}
+        {{ note_form.text }}
+        {{ note_form.text.errors }}
+        <p>{{ note_form.text.help_text }}</p>
+      </div>
+      <button type="submit" class="button button-primary">提交说明</button>
+    </form>
+  {% else %}
+    <p>当前工单或账号状态不允许追加说明，历史记录仍可查看。</p>
+  {% endif %}
+</section>

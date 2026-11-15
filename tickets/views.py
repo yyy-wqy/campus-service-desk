@@ -2,10 +2,14 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.http import HttpResponseForbidden
+from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods
 
 from .forms import TicketCreateForm
+from .note_forms import TicketNoteForm
+from .note_services import can_add_ticket_note
+from .query_forms import TicketQueryForm
 from .permissions import can_create_ticket, visible_tickets
 
 
@@ -37,7 +41,33 @@ def ticket_list(request):
         "building",
         "fault_category",
     )
-    return render(request, "tickets/ticket_list.html", {"tickets": tickets})
+    form = TicketQueryForm(request.GET)
+    if form.is_valid():
+        data = form.cleaned_data
+        if data["q"]:
+            keyword = data["q"]
+            tickets = tickets.filter(
+                Q(number__icontains=keyword)
+                | Q(title__icontains=keyword)
+                | Q(building_name_snapshot__icontains=keyword)
+                | Q(location_detail__icontains=keyword)
+            )
+        if data["status"]:
+            tickets = tickets.filter(status=data["status"])
+        if data["priority"]:
+            tickets = tickets.filter(priority=data["priority"])
+        if data["cancellation"]:
+            tickets = tickets.filter(
+                cancellation_pending=data["cancellation"] == "1"
+            )
+    else:
+        tickets = tickets.none()
+
+    return render(
+        request,
+        "tickets/ticket_list.html",
+        {"tickets": tickets, "query_form": form},
+    )
 
 
 @login_required
@@ -52,4 +82,15 @@ def ticket_detail(request, pk):
         ),
         pk=pk,
     )
-    return render(request, "tickets/ticket_detail.html", {"ticket": ticket})
+    return render(
+        request,
+        "tickets/ticket_detail.html",
+        {
+            "ticket": ticket,
+            "note_form": TicketNoteForm(),
+            "can_add_note": can_add_ticket_note(request.user, ticket),
+            "history": ticket.history.select_related("actor").order_by(
+                "created_at", "pk"
+            ),
+        },
+    )

@@ -12,12 +12,33 @@
     {% if user.role == 'student' or user.role == 'teacher' %}<a class="button button-primary" href="{% url 'tickets:create' %}">提交报修</a>{% endif %}
   </section>
 
+  <section class="surface-card">
+    <h2>查询工单</h2>
+    <form method="get" class="ticket-form">
+      {% for field in query_form %}
+        <div class="field-group">
+          {{ field.label_tag }}
+          {{ field }}
+          {{ field.errors }}
+        </div>
+      {% endfor %}
+      {{ query_form.non_field_errors }}
+      <div class="form-actions">
+        <button type="submit" class="button button-primary">查询</button>
+        <a href="{{ request.path }}" class="button button-secondary">重置</a>
+      </div>
+    </form>
+  </section>
+
   <div class="ticket-list">
     {% for ticket in tickets %}
       <a class="ticket-row" href="{% url 'tickets:detail' ticket.pk %}">
         <div><strong>{{ ticket.title }}</strong><span>{{ ticket.number }}</span></div>
         <div><span>{{ ticket.building_name_snapshot }} · {{ ticket.location_detail }}</span><small>{{ ticket.created_at|date:'Y-m-d H:i' }}</small></div>
         <span class="ticket-status">{{ ticket.get_status_display }}</span>
+    {% if ticket.cancellation_pending %}
+      <span class="ticket-status">取消申请待审核</span>
+    {% endif %}
       </a>
     {% empty %}
       <div class="empty-state"><h2>暂无工单</h2><p>当前账号还没有可查看的工单。</p></div>
