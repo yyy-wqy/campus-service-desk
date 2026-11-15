@@ -194,9 +194,14 @@ def _transition_ticket_once(*, ticket, actor, to_status, description="", metadat
         raise ValidationError({"status": "不允许执行该工单状态变更。"})
     with transaction.atomic():
         locked = Ticket.objects.select_for_update().get(pk=ticket.pk)
+        current_actor = (
+            User.objects.select_for_update()
+            .filter(pk=getattr(actor, "pk", None))
+            .first()
+        )
         if to_status not in ALLOWED_STATUS_TRANSITIONS.get(locked.status, set()):
             raise ValidationError({"status": "工单状态已变化，请刷新后重试。"})
-        if not can_transition_ticket(actor, locked, to_status):
+        if not can_transition_ticket(current_actor, locked, to_status):
             raise PermissionDenied("当前账号无权执行该状态变更。")
         old_status = locked.status
         locked.status = to_status
@@ -204,7 +209,7 @@ def _transition_ticket_once(*, ticket, actor, to_status, description="", metadat
         TicketHistory.objects.create(
             ticket=locked,
             event_type=TicketHistory.EventType.STATUS_CHANGED,
-            actor=actor,
+            actor=current_actor,
             from_status=old_status,
             to_status=to_status,
             description=description,

@@ -312,6 +312,51 @@ class AdminTicketWorkflowTests(TestCase):
         self.assertEqual(assigned.status, Ticket.Status.PENDING_WORK)
         self.assertEqual(assigned.history.count(), history_count)
 
+    def test_transition_rechecks_stale_actor_account_state(self):
+        cases = (
+            ("disabled", {"is_active": False}),
+            ("approval-revoked", {"approval_status": "pending"}),
+            ("role-changed", {"role": "teacher"}),
+        )
+
+        for suffix, account_changes in cases:
+            with self.subTest(case=suffix):
+                ticket = self.create_ticket(title=f"操作人状态复核-{suffix}")
+                worker = self.create_worker(f"stale-actor-{suffix}")
+                assigned = accept_and_assign_ticket(
+                    ticket=ticket,
+                    actor=self.admin,
+                    worker=worker,
+                )
+                history_count = assigned.history.count()
+                stale_state = (
+                    worker.is_active,
+                    worker.approval_status,
+                    worker.role,
+                )
+
+                get_user_model().objects.filter(pk=worker.pk).update(
+                    **account_changes
+                )
+
+                self.assertEqual(
+                    (
+                        worker.is_active,
+                        worker.approval_status,
+                        worker.role,
+                    ),
+                    stale_state,
+                )
+                with self.assertRaises(PermissionDenied):
+                    transition_ticket(
+                        ticket=assigned,
+                        actor=worker,
+                        to_status=Ticket.Status.IN_PROGRESS,
+                    )
+                assigned.refresh_from_db()
+                self.assertEqual(assigned.status, Ticket.Status.PENDING_WORK)
+                self.assertEqual(assigned.history.count(), history_count)
+
     def test_unqualified_inactive_or_nonmaintenance_accounts_cannot_be_assigned(self):
         invalid_workers = (
             self.create_worker(
