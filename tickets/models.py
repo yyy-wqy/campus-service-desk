@@ -39,16 +39,17 @@ class TicketQuerySet(models.QuerySet):
         return super().update(**kwargs)
 
     def visible_to(self, user):
-        if not getattr(user, "is_authenticated", False):
+        from .permissions import current_business_user
+
+        current = current_business_user(user)
+        if current is None:
             return self.none()
-        if user.role == "admin":
+        if current.role == "admin":
             return self
-        if user.role in {"student", "teacher"}:
-            return self.filter(reporter=user)
-        if user.role == "maintenance":
-            if not user.can_handle_maintenance:
-                return self.none()
-            return self.filter(current_assignee=user)
+        if current.role in {"student", "teacher"}:
+            return self.filter(reporter=current)
+        if current.role == "maintenance":
+            return self.filter(current_assignee=current)
         return self.none()
 
 

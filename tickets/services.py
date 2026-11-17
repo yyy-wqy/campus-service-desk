@@ -82,8 +82,7 @@ def _create_ticket_once(
     preferred_visit_time="",
 ):
     with transaction.atomic():
-        reporter = User.objects.filter(pk=getattr(reporter, "pk", None)).first()
-        require_create_permission(reporter)
+        reporter = require_create_permission(reporter)
         normalized_location = validate_repair_scope(
             reporter=reporter,
             building=building,
@@ -239,7 +238,11 @@ PRIORITY_EDITABLE_STATUSES = {
 
 
 def _current_manager(actor):
-    actor = User.objects.filter(pk=getattr(actor, "pk", None)).first()
+    actor = (
+        User.objects.select_for_update()
+        .filter(pk=getattr(actor, "pk", None))
+        .first()
+    )
     if not can_manage_ticket(actor):
         raise PermissionDenied("当前账号无权管理工单。")
     return actor

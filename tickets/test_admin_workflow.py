@@ -10,7 +10,14 @@ from accounts.models import MaintenanceApplication, MaintenanceMaterial
 from locations.models import Building, FaultCategory
 
 from .models import Ticket, TicketHistory
-from .permissions import can_process_ticket, can_view_ticket, visible_tickets
+from .permissions import (
+    can_confirm_ticket,
+    can_create_ticket,
+    can_manage_ticket,
+    can_process_ticket,
+    can_view_ticket,
+    visible_tickets,
+)
 from .services import (
     TicketOperationFailed,
     accept_and_assign_ticket,
@@ -311,6 +318,109 @@ class AdminTicketWorkflowTests(TestCase):
         assigned.refresh_from_db()
         self.assertEqual(assigned.status, Ticket.Status.PENDING_WORK)
         self.assertEqual(assigned.history.count(), history_count)
+
+    def test_stale_worker_cannot_read_or_process_after_account_revocation(self):
+        for suffix, change in (
+            ("disabled", {"is_active": False}),
+            ("review-revoked", {"approval_status": "pending"}),
+            ("role-changed", {"role": "teacher"}),
+        ):
+            with self.subTest(case=suffix):
+                worker = self.create_worker(f"query-revoked-{suffix}")
+                ticket = accept_and_assign_ticket(
+                    ticket=self.create_ticket(f"权限测试-{suffix}"),
+                    actor=self.admin,
+                    worker=worker,
+                )
+                get_user_model().objects.filter(pk=worker.pk).update(**change)
+                self.assertFalse(can_view_ticket(worker, ticket))
+                self.assertFalse(can_process_ticket(worker, ticket))
+                self.assertFalse(visible_tickets(worker).filter(pk=ticket.pk).exists())
+                self.assertFalse(
+                    Ticket.objects.visible_to(worker).filter(pk=ticket.pk).exists()
+                )
+
+    def test_stale_student_cannot_create_or_confirm_after_revocation(self):
+        for suffix, change in (
+            ("disabled", {"is_active": False}),
+            ("review-revoked", {"approval_status": "pending"}),
+            ("role-changed", {"role": "maintenance"}),
+        ):
+            with self.subTest(case=suffix):
+                student = get_user_model().objects.create_user(
+                    username=f"stale-reporter-{suffix}",
+                    role="student",
+                    approval_status="approved",
+                    phone=f"1399000000{len(suffix)}",
+                )
+                ticket = create_ticket(
+                    reporter=student,
+                    building=self.building,
+                    fault_category=self.category,
+                    title=f"旧账号报修-{suffix}",
+                    description="验证账号撤权后无权操作。",
+                    location_kind=Ticket.LocationKind.ROOM,
+                    room_number="A101",
+                )
+                old_count = Ticket.objects.count()
+                history_count = ticket.history.count()
+                get_user_model().objects.filter(pk=student.pk).update(**change)
+                self.assertFalse(can_create_ticket(student))
+                self.assertFalse(can_view_ticket(student, ticket))
+                self.assertFalse(can_confirm_ticket(student, ticket))
+                self.assertFalse(visible_tickets(student).filter(pk=ticket.pk).exists())
+                with self.assertRaises(PermissionDenied):
+                    create_ticket(
+                        reporter=student,
+                        building=self.building,
+                        fault_category=self.category,
+                        title="越权创建",
+                        description="撤权后的旧对象",
+                        location_kind=Ticket.LocationKind.ROOM,
+                        room_number="A101",
+                    )
+                with self.assertRaises(PermissionDenied):
+                    transition_ticket(
+                        ticket=ticket,
+                        actor=student,
+                        to_status=Ticket.Status.CANCELLED,
+                    )
+                ticket.refresh_from_db()
+                self.assertEqual(ticket.status, Ticket.Status.PENDING_ACCEPTANCE)
+                self.assertEqual(ticket.history.count(), history_count)
+                self.assertEqual(Ticket.objects.count(), old_count)
+
+    def test_stale_admin_cannot_modify_ticket_after_revocation(self):
+        for suffix, change in (
+            ("disabled", {"is_active": False}),
+            ("review-revoked", {"approval_status": "pending"}),
+            ("role-changed", {"role": "teacher"}),
+        ):
+            with self.subTest(case=suffix):
+                manager = get_user_model().objects.create_user(
+                    username=f"stale-manager-{suffix}",
+                    role="admin",
+                    approval_status="approved",
+                )
+                ticket = self.create_ticket(title=f"待处理-{suffix}")
+                worker = self.create_worker(f"candidate-{suffix}")
+                old_count = ticket.history.count()
+                get_user_model().objects.filter(pk=manager.pk).update(**change)
+                self.assertFalse(can_manage_ticket(manager))
+                self.assertFalse(visible_tickets(manager).filter(pk=ticket.pk).exists())
+                for action in (
+                    lambda: accept_and_assign_ticket(ticket=ticket, actor=manager, worker=worker),
+                    lambda: reject_ticket(ticket=ticket, actor=manager, reason="拒绝"),
+                    lambda: set_ticket_priority(ticket=ticket, actor=manager, priority=Ticket.Priority.URGENT),
+                    lambda: transition_ticket(ticket=ticket, actor=manager, to_status=Ticket.Status.REJECTED),
+                ):
+                    with self.assertRaises(PermissionDenied):
+                        action()
+                ticket.refresh_from_db()
+                self.assertEqual(ticket.status, Ticket.Status.PENDING_ACCEPTANCE)
+                self.assertEqual(ticket.priority, Ticket.Priority.NORMAL)
+                self.assertIsNone(ticket.current_assignee)
+                self.assertEqual(ticket.history.count(), old_count)
 
     def test_transition_rechecks_stale_actor_account_state(self):
         cases = (
