@@ -2,12 +2,16 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.http import HttpResponseForbidden
+from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods, require_POST
 
 from .forms import TicketCreateForm
 from .models import Ticket
+from .note_forms import TicketNoteForm
+from .note_services import can_add_ticket_note
 from .permissions import can_create_ticket, can_manage_ticket, visible_tickets
+from .query_forms import TicketQueryForm
 from .services import (
     accept_and_assign_ticket,
     reject_ticket,
@@ -48,7 +52,33 @@ def ticket_list(request):
         "building",
         "fault_category",
     )
-    return render(request, "tickets/ticket_list.html", {"tickets": tickets})
+    form = TicketQueryForm(request.GET)
+    if form.is_valid():
+        data = form.cleaned_data
+        if data["q"]:
+            keyword = data["q"]
+            tickets = tickets.filter(
+                Q(number__icontains=keyword)
+                | Q(title__icontains=keyword)
+                | Q(building_name_snapshot__icontains=keyword)
+                | Q(location_detail__icontains=keyword)
+            )
+        if data["status"]:
+            tickets = tickets.filter(status=data["status"])
+        if data["priority"]:
+            tickets = tickets.filter(priority=data["priority"])
+        if data["cancellation"]:
+            tickets = tickets.filter(
+                cancellation_pending=data["cancellation"] == "1"
+            )
+    else:
+        tickets = tickets.none()
+
+    return render(
+        request,
+        "tickets/ticket_list.html",
+        {"tickets": tickets, "query_form": form},
+    )
 
 
 @login_required
@@ -63,11 +93,21 @@ def ticket_detail(request, pk):
         ),
         pk=pk,
     )
+    return render(
+        request,
+        "tickets/ticket_detail.html",
+        ticket_detail_context(request.user, ticket),
+    )
+
+
+def ticket_detail_context(user, ticket, *, note_form=None):
     context = {
         "ticket": ticket,
-        "history": ticket.history.select_related("actor"),
+        "history": ticket.history.select_related("actor").order_by("created_at", "pk"),
+        "note_form": note_form if note_form is not None else TicketNoteForm(),
+        "can_add_note": can_add_ticket_note(user, ticket),
     }
-    if can_manage_ticket(request.user):
+    if can_manage_ticket(user):
         context.update(
             {
                 "priority_form": TicketPriorityForm(
@@ -77,7 +117,7 @@ def ticket_detail(request, pk):
                 "assignment_form": TicketAssignmentForm(),
             }
         )
-    return render(request, "tickets/ticket_detail.html", context)
+    return context
 
 
 def _form_error_text(form):

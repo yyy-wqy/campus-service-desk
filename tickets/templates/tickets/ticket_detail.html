@@ -10,6 +10,9 @@
       <p>提交于 {{ ticket.created_at|date:'Y-m-d H:i' }}</p>
     </div>
     <span class="ticket-status ticket-status-large">{{ ticket.get_status_display }}</span>
+    {% if ticket.cancellation_pending %}
+      <span class="ticket-status">取消申请待审核</span>
+    {% endif %}
   </section>
 
   <div class="detail-grid">
@@ -34,7 +37,6 @@
       </dl>
     </aside>
   </div>
-
   {% if user.role == 'admin' %}
     <section class="surface-card admin-ticket-actions">
       <h2>管理员操作</h2>
@@ -81,19 +83,7 @@
     </section>
   {% endif %}
 
-  <section class="surface-card ticket-history">
-    <h2>操作历史</h2>
-    <ol>
-      {% for event in history %}
-        <li>
-          <div><strong>{{ event.get_event_type_display }}</strong><time>{{ event.created_at|date:'Y-m-d H:i' }}</time></div>
-          <p>{{ event.description|default:'无补充说明' }}</p>
-          <small>操作人：{{ event.actor.real_name|default:event.actor.username }}</small>
-        </li>
-      {% empty %}
-        <li>暂无历史记录。</li>
-      {% endfor %}
-    </ol>
-  </section>
+  {% include "tickets/_history.html" %}
+  {% include "tickets/_note_form.html" %}
   <div class="form-actions"><a class="button button-secondary" href="{% url 'tickets:list' %}">返回列表</a></div>
 {% endblock %}

@@ -1,0 +1,27 @@
+<section class="surface-card ticket-history">
+  <h2>操作历史</h2>
+  <ol>
+    {% for event in history %}
+      <li>
+        <p>
+          <strong>{{ event.get_event_type_display }}</strong>
+          <time datetime="{{ event.created_at|date:'c' }}">
+            {{ event.created_at|date:'Y-m-d H:i:s' }}
+          </time>
+        </p>
+        <p>
+          记录人：{{ event.actor.real_name|default:event.actor.username }}
+          （{{ event.actor.username }}）
+        </p>
+        {% if event.from_status or event.to_status %}
+          <p>状态：{{ event.get_from_status_display }} → {{ event.get_to_status_display }}</p>
+        {% endif %}
+        <div class="description-text">
+          {{ event.description|default:'无补充说明'|linebreaksbr }}
+        </div>
+      </li>
+    {% empty %}
+      <li>暂无操作历史。</li>
+    {% endfor %}
+  </ol>
+</section>
