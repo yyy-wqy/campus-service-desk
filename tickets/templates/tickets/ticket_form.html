@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block title %}提交报修｜校园智办{% endblock %}
+
+{% block content %}
+  <section class="page-heading">
+    <p class="eyebrow">REPAIR REQUEST</p>
+    <h1>提交报修</h1>
+    <p>请准确填写故障位置与现象。提交后原始信息将保留，补充内容会以历史记录追加。</p>
+  </section>
+
+  <form class="ticket-form surface-card" method="post" novalidate>
+    {% csrf_token %}
+    {% if form.non_field_errors %}<div class="form-alert">{{ form.non_field_errors }}</div>{% endif %}
+    <div class="form-grid">
+      {% for field in form %}
+        <div class="field-group{% if field.name == 'description' %} field-span{% endif %}">
+          <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+          {{ field }}
+          {% if field.help_text %}<div class="field-help">{{ field.help_text }}</div>{% endif %}
+          {% if field.errors %}<div class="field-error">{{ field.errors }}</div>{% endif %}
+        </div>
+      {% endfor %}
+    </div>
+    <div class="form-actions">
+      <a class="button button-secondary" href="{% url 'tickets:list' %}">返回工单列表</a>
+      <button class="button button-primary" type="submit">确认提交</button>
+    </div>
+  </form>
+{% endblock %}
