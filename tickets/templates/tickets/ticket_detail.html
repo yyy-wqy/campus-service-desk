@@ -10,6 +10,9 @@
       <p>提交于 {{ ticket.created_at|date:'Y-m-d H:i' }}</p>
     </div>
     <span class="ticket-status ticket-status-large">{{ ticket.get_status_display }}</span>
+    {% if ticket.cancellation_pending %}
+      <span class="ticket-status">取消申请待审核</span>
+    {% endif %}
   </section>
 
   <div class="detail-grid">
@@ -34,5 +37,7 @@
       </dl>
     </aside>
   </div>
+  {% include "tickets/_history.html" %}
+  {% include "tickets/_note_form.html" %}
   <div class="form-actions"><a class="button button-secondary" href="{% url 'tickets:list' %}">返回列表</a></div>
 {% endblock %}
