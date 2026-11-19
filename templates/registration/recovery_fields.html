@@ -1,5 +1,6 @@
 {% if form.non_field_errors %}<div class="form-alert" role="alert">{{ form.non_field_errors }}</div>{% endif %}
-{% for field in form %}
+{% for field in form.hidden_fields %}{{ field }}{% endfor %}
+{% for field in form.visible_fields %}
   <div class="field-group">
     <label for="{{ field.id_for_label }}">{{ field.label }}</label>
     <div class="field-control">{{ field }}</div>

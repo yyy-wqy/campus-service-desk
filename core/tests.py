@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
+from accounts.models import MaintenanceApplication
 
 
 class PublicPageTests(TestCase):
@@ -30,6 +31,7 @@ class RoleNavigationTests(TestCase):
             )
             for role in ("student", "teacher", "maintenance", "admin")
         }
+        MaintenanceApplication.objects.create(worker=cls.users["maintenance"], status="approved", version=1)
 
     def assert_navigation(self, role, visible, hidden):
         self.client.force_login(self.users[role])
