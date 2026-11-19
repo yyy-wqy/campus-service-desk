@@ -5,7 +5,7 @@ from django.http import HttpResponse
 from django.test import Client, TestCase, override_settings
 from django.urls import include, path, reverse
 
-from .models import LoginProtection, User
+from .models import LoginProtection, MaintenanceApplication, User
 from .urls import urlpatterns as account_urls
 
 
@@ -105,7 +105,9 @@ class LoginTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         for role in User.Role.values:
-            User.objects.create_user(username=role, password=PASSWORD, role=role, approval_status="approved")
+            user = User.objects.create_user(username=role, password=PASSWORD, role=role, approval_status="approved")
+            if role == "maintenance":
+                MaintenanceApplication.objects.create(worker=user, status="approved", version=1)
 
     def login(self, account="student", **extra):
         return self.client.post(reverse("accounts:login"), {

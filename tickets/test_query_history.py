@@ -2,7 +2,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from accounts.models import User
+from accounts.models import MaintenanceApplication, User
 from locations.models import Building, FaultCategory
 
 from .models import Ticket, TicketHistory
@@ -29,6 +29,11 @@ class TicketQueryHistoryTests(TestCase):
                 approval_status="approved",
                 phone=f"1390000000{index}",
             )
+            if role == User.Role.MAINTENANCE:
+                MaintenanceApplication.objects.create(
+                    worker=cls.users[name],
+                    status=MaintenanceApplication.Status.APPROVED,
+                )
 
         building = Building.objects.create(
             name="查询测试教学楼",

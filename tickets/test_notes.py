@@ -129,6 +129,15 @@ class TicketNoteTests(TestCase):
                 self.assertIn("text", response.context["note_form"].errors)
                 self.assertFalse(self.notes(self.first).exists())
 
+    def test_admin_keeps_workflow_forms_after_note_validation_error(self):
+        self.client.force_login(self.users["manager"])
+        response = self.client.post(self.url(self.first), {"text": ""})
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("text", response.context["note_form"].errors)
+        self.assertIn("assignment_form", response.context)
+        self.assertIn("reject_form", response.context)
+        self.assertIn("priority_form", response.context)
+
     def test_terminal_tickets_are_read_only(self):
         self.client.force_login(self.users["student_a"])
         for status in ("rejected", "completed", "cancelled"):

@@ -47,10 +47,9 @@ def _add_note_once(*, ticket_id, actor_id, text):
         if ticket.status not in NOTE_ALLOWED_STATUSES:
             raise ValidationError("该工单已进入终态，只能查看，不能追加说明。")
 
-        # 与后续资质模块兼容；当前主分支尚未提供此属性。
         if (
             actor.role == User.Role.MAINTENANCE
-            and not getattr(actor, "can_handle_maintenance", True)
+            and not actor.can_handle_maintenance
         ):
             raise PermissionDenied("当前维修资质不允许补充工单说明。")
 

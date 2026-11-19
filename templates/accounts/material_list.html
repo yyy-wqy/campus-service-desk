@@ -1,0 +1,10 @@
+{% for material in materials %}
+<article class="message">
+  <strong>{{ material.get_category_display }}：{{ material.name|default:material.original_name }}</strong>
+  <p>专业方向：{{ material.direction|default:'不适用' }} · 证书类别：{{ material.certificate_category }}</p>
+  <p>编号：{{ material.certificate_number|default:'未填写' }} · 机构：{{ material.issuer|default:'未填写' }}</p>
+  <p>发证日期：{{ material.issued_on|default:'未填写' }} · 有效期：{% if material.permanent %}长期有效{% else %}{{ material.expires_on|default:'未填写' }}{% endif %}</p>
+  {% if not material.disposed_at %}<a href="{% url 'accounts:material_download' material.pk %}">授权下载：{{ material.original_name }}</a>{% else %}<span>已按政策受控处置</span>{% endif %}
+  {% if editable %}<form method="post" action="{% url 'accounts:material_retire' material.pk %}">{% csrf_token %}<button type="submit" class="button button-secondary">移出本轮材料（历史保留）</button></form>{% endif %}
+</article>
+{% empty %}<p>暂无材料。</p>{% endfor %}

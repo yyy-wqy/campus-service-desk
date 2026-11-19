@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}维修资质申请 | 校园智办{% endblock %}
+{% block content %}
+<div class="qualification-page">
+<h1>维修资质申请</h1><p>登录账号：{{ user.username }} · 状态：{{ application.get_status_display }}</p>
+<p>工作关系证明、专业资质证明每类1至3份，单文件最多5MB；支持PDF/JPG/JPEG/PNG。证书真伪由人工审核。</p>
+{% include "accounts/material_list.html" %}
+{% if editable %}
+<h2>添加证明材料</h2><form class="login-form" method="post" enctype="multipart/form-data" action="{% url 'accounts:qualification_upload' %}">{% csrf_token %}{% include "registration/recovery_fields.html" %}<button type="submit" class="button button-primary">上传材料</button></form>
+<form method="post" action="{% url 'accounts:qualification_submit' %}">{% csrf_token %}<button type="submit" class="button button-primary">材料齐全，提交审核</button></form>
+{% else %}<p>当前材料已冻结，请等待审核或联系管理员。只有审核通过才能处理维修任务。</p>{% endif %}
+{% include "accounts/material_history.html" %}
+</div>
+{% endblock %}

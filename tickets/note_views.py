@@ -5,8 +5,9 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
 from .note_forms import TicketNoteForm
-from .note_services import add_ticket_note, can_add_ticket_note
+from .note_services import add_ticket_note
 from .permissions import visible_tickets
+from .views import ticket_detail_context
 
 
 @login_required
@@ -38,12 +39,5 @@ def ticket_note_add(request, pk):
     return render(
         request,
         "tickets/ticket_detail.html",
-        {
-            "ticket": ticket,
-            "history": ticket.history.select_related("actor").order_by(
-                "created_at", "pk"
-            ),
-            "note_form": form,
-            "can_add_note": can_add_ticket_note(request.user, ticket),
-        },
+        ticket_detail_context(request.user, ticket, note_form=form),
     )
