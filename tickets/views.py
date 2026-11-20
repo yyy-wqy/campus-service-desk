@@ -2,16 +2,17 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.http import HttpResponseForbidden
-from django.db.models import Q
+from django.db.models import OuterRef, Q, Subquery
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods, require_POST
 
 from .forms import TicketCreateForm
-from .models import Ticket
+from .models import Ticket, TicketHistory
 from .note_forms import TicketNoteForm
 from .note_services import can_add_ticket_note
 from .permissions import can_create_ticket, can_manage_ticket, visible_tickets
 from .query_forms import TicketQueryForm
+from .repair_ui import repair_context
 from .services import (
     accept_and_assign_ticket,
     reject_ticket,
@@ -52,6 +53,13 @@ def ticket_list(request):
         "building",
         "fault_category",
     )
+    if request.user.role == "maintenance":
+        assignment = TicketHistory.objects.filter(
+            ticket_id=OuterRef("pk"), event_type=TicketHistory.EventType.ASSIGNED,
+        ).order_by("-created_at", "-pk")
+        tickets = tickets.annotate(
+            latest_assigned_at=Subquery(assignment.values("created_at")[:1])
+        )
     form = TicketQueryForm(request.GET)
     if form.is_valid():
         data = form.cleaned_data
@@ -117,6 +125,7 @@ def ticket_detail_context(user, ticket, *, note_form=None):
                 "assignment_form": TicketAssignmentForm(),
             }
         )
+    context.update(repair_context(user, ticket))
     return context
 
 
