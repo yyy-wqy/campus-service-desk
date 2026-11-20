@@ -244,28 +244,30 @@ class TicketQueryHistoryTests(TestCase):
         self.assertContains(response, "&lt;script&gt;")
         self.assertNotContains(response, "<script>alert(1)</script>")
 
-    def test_real_transitions_show_statuses_without_descriptions(self):
-        from .services import transition_ticket
+    def test_real_repair_flow_displays_all_round_transitions(self):
+        from .repair_services import (
+            confirm_repair_result, start_repair, submit_repair_result,
+        )
 
-        ticket = Ticket.objects.get(pk=self.second.pk)
-        steps = [
-            ("worker_a", Ticket.Status.IN_PROGRESS),
-            ("worker_a", Ticket.Status.PENDING_CONFIRMATION),
-            ("student_a", Ticket.Status.IN_PROGRESS),
-            ("worker_a", Ticket.Status.PENDING_CONFIRMATION),
-            ("student_a", Ticket.Status.COMPLETED),
-        ]
-        for actor_name, status in steps:
-            ticket = transition_ticket(
-                ticket=ticket,
-                actor=self.users[actor_name],
-                to_status=status,
+        ticket = start_repair(
+            ticket_id=self.second.pk, actor=self.users["worker_a"],
+            version=self.second.repair_version,
+        )
+        for round_number in (1, 2):
+            ticket = submit_repair_result(
+                ticket_id=ticket.pk, actor=self.users["worker_a"],
+                version=ticket.repair_version,
+                content=f"第{round_number}轮维修结果",
+            )
+            result = ticket.repair_results.get(round_number=round_number)
+            ticket = confirm_repair_result(
+                ticket_id=ticket.pk, actor=self.users["student_a"],
+                version=ticket.repair_version, result_id=result.pk,
+                decision="unresolved" if round_number == 1 else "resolved",
+                reason="仍有异响" if round_number == 1 else "",
             )
 
-        records = list(
-            ticket.history.filter(event_type="status_changed")
-            .order_by("created_at", "pk")
-        )
+        records = list(ticket.history.filter(event_type="status_changed"))
         self.assertEqual(
             [(record.from_status, record.to_status) for record in records],
             [
@@ -276,17 +278,15 @@ class TicketQueryHistoryTests(TestCase):
                 ("pending_confirmation", "completed"),
             ],
         )
-        self.assertTrue(all(record.description == "" for record in records))
         self.assertEqual(
             [record.actor_id for record in records],
-            [self.users[name].pk for name, _ in steps],
+            [self.users[name].pk for name in (
+                "worker_a", "worker_a", "student_a", "worker_a", "student_a"
+            )],
         )
         self.client.force_login(self.users["student_a"])
-        response = self.client.get(
-            reverse("tickets:detail", args=[ticket.pk])
-        )
+        response = self.client.get(reverse("tickets:detail", args=[ticket.pk]))
         for text, count in (
-            ("— → 待受理", 1),
             ("待处理 → 处理中", 1),
             ("处理中 → 待报修人确认", 2),
             ("待报修人确认 → 处理中", 1),
@@ -295,4 +295,21 @@ class TicketQueryHistoryTests(TestCase):
             self.assertContains(
                 response, f"<p>状态：{text}</p>", count=count, html=True
             )
+        self.assertContains(response, "第1轮维修结果")
+        self.assertContains(response, "第2轮维修结果")
         self.assertEqual(ticket.status, Ticket.Status.COMPLETED)
+
+    def test_legacy_history_without_description_still_shows_statuses(self):
+        TicketHistory.objects.create(
+            ticket=self.second, actor=self.users["worker_a"],
+            event_type="status_changed", description="",
+            from_status="in_progress", to_status="pending_confirmation",
+        )
+        self.client.force_login(self.users["student_a"])
+        response = self.client.get(
+            reverse("tickets:detail", args=[self.second.pk])
+        )
+        self.assertContains(response, "无补充说明")
+        self.assertContains(
+            response, "<p>状态：处理中 → 待报修人确认</p>", html=True
+        )

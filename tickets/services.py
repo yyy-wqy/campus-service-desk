@@ -183,7 +183,6 @@ ALLOWED_STATUS_TRANSITIONS = {
     Ticket.Status.PENDING_CONFIRMATION: {
         Ticket.Status.IN_PROGRESS,
         Ticket.Status.COMPLETED,
-        Ticket.Status.CANCELLED,
     },
 }
 
@@ -202,6 +201,12 @@ def _transition_ticket_once(*, ticket, actor, to_status, description="", metadat
             raise ValidationError({"status": "工单状态已变化，请刷新后重试。"})
         if not can_transition_ticket(current_actor, locked, to_status):
             raise PermissionDenied("当前账号无权执行该状态变更。")
+        if to_status in {
+            Ticket.Status.IN_PROGRESS,
+            Ticket.Status.PENDING_CONFIRMATION,
+            Ticket.Status.COMPLETED,
+        }:
+            raise ValidationError("维修状态必须通过维修结果和确认专用接口变更。")
         old_status = locked.status
         locked.status = to_status
         locked.save(update_fields=("status", "updated_at"))
@@ -219,6 +224,15 @@ def _transition_ticket_once(*, ticket, actor, to_status, description="", metadat
 
 def transition_ticket(*, ticket, actor, to_status, description="", metadata=None):
     """Shared atomic status/history primitive for Issues #21-#24."""
+    # 兼容旧的开始维修调用，仍检查版本、冻结与权限。
+    if (
+        ticket.status == Ticket.Status.PENDING_WORK
+        and to_status == Ticket.Status.IN_PROGRESS
+    ):
+        from .repair_services import start_repair
+        return start_repair(
+            ticket_id=ticket.pk, actor=actor, version=ticket.repair_version
+        )
 
     return _run_ticket_operation(
         lambda: _transition_ticket_once(

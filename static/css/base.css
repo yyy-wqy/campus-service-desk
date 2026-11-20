@@ -400,3 +400,5 @@ svg { display: block; }
 .data-table tr:last-child td { border-bottom: none; }
 .table-actions { display: flex; align-items: center; gap: 12px; }
 .inline-form { display: inline; margin: 0; }
+
+.ticket-row .ticket-priority-urgent { color: #9c2f17; background: #fff0e8; border: 1px solid #e5a78a; border-radius: 8px; padding: 5px 9px; font-weight: 700; text-align: center; }

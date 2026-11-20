@@ -91,8 +91,6 @@ def can_transition_ticket(user, ticket, to_status):
     if ticket.status == Ticket.Status.PENDING_CONFIRMATION:
         if to_status in {Ticket.Status.IN_PROGRESS, Ticket.Status.COMPLETED}:
             return can_confirm_ticket(user, ticket)
-        if to_status == Ticket.Status.CANCELLED:
-            return can_manage_ticket(user)
     return False
 
 

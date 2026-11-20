@@ -154,6 +154,7 @@ class Ticket(models.Model):
         choices=Status.choices,
         default=Status.PENDING_ACCEPTANCE,
     )
+    repair_version = models.PositiveIntegerField("维修操作版本", default=0, editable=False)
     cancellation_pending = models.BooleanField("取消申请待审核", default=False)
     created_at = models.DateTimeField("提交时间", auto_now_add=True)
     updated_at = models.DateTimeField("更新时间", auto_now=True)
@@ -246,6 +247,7 @@ class TicketHistory(models.Model):
         ASSIGNED = "assigned", "分派"
         PRIORITY_CHANGED = "priority_changed", "优先级变更"
         NOTE_ADDED = "note_added", "追加说明"
+        PROGRESS_ADDED = "progress_added", "维修进度"
         CANCELLATION_CHANGED = "cancellation_changed", "取消申请变更"
 
     ticket = models.ForeignKey(
@@ -296,3 +298,113 @@ class TicketHistory(models.Model):
 
     def delete(self, *args, **kwargs):
         raise ValidationError("工单历史只能追加，不能删除。")
+
+class RepairRecordQuerySet(models.QuerySet):
+    def update(self, **kwargs):
+        raise ValidationError("维修记录只能新增，不能覆盖。")
+
+    def delete(self):
+        raise ValidationError("维修记录必须保留，不能删除。")
+
+
+class RepairRecord(models.Model):
+    created_at = models.DateTimeField("记录时间", auto_now_add=True)
+    objects = RepairRecordQuerySet.as_manager()
+
+    class Meta:
+        abstract = True
+        ordering = ("created_at", "pk")
+
+    def save(self, *args, **kwargs):
+        if self.pk is not None:
+            raise ValidationError("维修记录只能新增，不能覆盖。")
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError("维修记录必须保留，不能删除。")
+
+
+class RepairProgress(RepairRecord):
+    ticket = models.ForeignKey(
+        Ticket, on_delete=models.PROTECT, related_name="repair_progress"
+    )
+    worker = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
+        related_name="repair_progress_records",
+    )
+    round_number = models.PositiveIntegerField("维修轮次")
+    content = models.TextField("进度内容", max_length=2000)
+
+    class Meta(RepairRecord.Meta):
+        abstract = False
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(round_number__gte=1),
+                name="repair_progress_round_positive",
+            ),
+            models.CheckConstraint(
+                condition=~models.Q(content=""),
+                name="repair_progress_content_nonempty",
+            ),
+        ]
+
+
+class RepairResult(RepairRecord):
+    ticket = models.ForeignKey(
+        Ticket, on_delete=models.PROTECT, related_name="repair_results"
+    )
+    worker = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
+        related_name="repair_result_records",
+    )
+    round_number = models.PositiveIntegerField("维修轮次")
+    content = models.TextField("维修结果", max_length=5000)
+
+    class Meta(RepairRecord.Meta):
+        abstract = False
+        ordering = ("round_number", "pk")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("ticket", "round_number"),
+                name="repair_result_unique_round",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(round_number__gte=1),
+                name="repair_result_round_positive",
+            ),
+            models.CheckConstraint(
+                condition=~models.Q(content=""),
+                name="repair_result_content_nonempty",
+            ),
+        ]
+
+
+class RepairConfirmation(RepairRecord):
+    class Decision(models.TextChoices):
+        RESOLVED = "resolved", "已解决"
+        UNRESOLVED = "unresolved", "未解决，退回维修"
+
+    result = models.OneToOneField(
+        RepairResult, on_delete=models.PROTECT, related_name="confirmation"
+    )
+    reporter = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
+        related_name="repair_confirmations",
+    )
+    decision = models.CharField(
+        "确认结果", max_length=20, choices=Decision.choices
+    )
+    reason = models.TextField("未解决原因", max_length=2000, blank=True)
+
+    class Meta(RepairRecord.Meta):
+        abstract = False
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(decision__in=("resolved", "unresolved")),
+                name="repair_confirmation_valid_decision",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(decision="resolved") | ~models.Q(reason=""),
+                name="repair_unresolved_requires_reason",
+            ),
+        ]
