@@ -71,4 +71,14 @@ def repair_action(request, pk, action):
             request.user, ticket, bound_form=form, action=action
         )
     )
+    context["repair_conflict"] = response_status == 409
+    if context["repair_conflict"]:
+        drafts = []
+        for field in form.visible_fields():
+            value = field.value()
+            choices = getattr(field.field, "choices", None)
+            if choices:
+                value = dict(choices).get(value, value)
+            drafts.append({"name": field.name, "label": field.label, "value": value})
+        context["repair_draft_fields"] = drafts
     return render(request, "tickets/ticket_detail.html", context, status=response_status)

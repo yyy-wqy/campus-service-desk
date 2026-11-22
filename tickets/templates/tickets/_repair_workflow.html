@@ -1,14 +1,29 @@
 <section class="surface-card">
   <h2>维修处理</h2>
-  {% if repair_error_form.errors %}
+  {% if repair_error_form.errors and not repair_conflict %}
     <div class="form-alert" role="alert">{{ repair_error_form.errors }}</div>
+  {% endif %}
+  {% if repair_conflict %}
+    <div class="form-alert" role="alert">
+      {{ repair_error_form.non_field_errors }}
+      <p>工单信息已变化，本次操作未保存。请复制下方草稿，再重新加载详情核对最新状态后操作；草稿不会自动提交。</p>
+      <a class="button button-secondary" href="{% url 'tickets:detail' ticket.pk %}">重新加载工单详情</a>
+    </div>
+    <div class="ticket-form">
+    {% for draft in repair_draft_fields %}
+      <div class="field-group">
+        <label for="repair-draft-{{ draft.name }}">未保存的{{ draft.label }}（只读，可复制）</label>
+        <div class="field-control"><textarea id="repair-draft-{{ draft.name }}" rows="4" readonly>{{ draft.value|default_if_none:"" }}</textarea></div>
+      </div>
+    {% endfor %}
+    </div>
   {% endif %}
   {% if ticket.cancellation_pending %}
     <p class="preview-notice">取消申请待审核，维修操作暂时冻结，仍可查看和追加说明。</p>
   {% endif %}
   <p>维修操作由当前维修人员执行，维修结果由原报修人确认。</p>
 
-  {% if can_start_repair %}
+  {% if can_start_repair and not repair_conflict %}
     <form class="ticket-form" method="post" action="{% url 'tickets:repair_action' ticket.pk 'start' %}">
       {% csrf_token %}
       {% include "registration/recovery_fields.html" with form=repair_start_form %}
@@ -16,7 +31,7 @@
     </form>
   {% endif %}
 
-  {% if can_add_repair_progress %}
+  {% if can_add_repair_progress and not repair_conflict %}
     <h3>追加维修进度</h3>
     <form class="ticket-form" method="post" action="{% url 'tickets:repair_action' ticket.pk 'progress' %}">
       {% csrf_token %}
@@ -25,7 +40,7 @@
     </form>
   {% endif %}
 
-  {% if can_submit_repair_result %}
+  {% if can_submit_repair_result and not repair_conflict %}
     <h3>提交本轮维修结果</h3>
     <form class="ticket-form" method="post" action="{% url 'tickets:repair_action' ticket.pk 'result' %}">
       {% csrf_token %}
@@ -34,7 +49,7 @@
     </form>
   {% endif %}
 
-  {% if can_confirm_repair_result %}
+  {% if can_confirm_repair_result and not repair_conflict %}
     <h3>确认本轮维修结果</h3>
     <p>请先核对下方本轮维修结果。选择“已解决”后工单将正式完成，不能继续提交维修进度或结果；选择“未解决”须填写原因，工单会退回继续维修。</p>
     <form class="ticket-form" method="post" action="{% url 'tickets:repair_action' ticket.pk 'confirm' %}">
