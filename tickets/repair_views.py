@@ -13,7 +13,6 @@ from .repair_services import (
     add_repair_progress, confirm_repair_result,
     start_repair, submit_repair_result,
 )
-from .repair_ui import repair_context
 from .views import ticket_detail_context
 
 
@@ -65,11 +64,8 @@ def repair_action(request, pk, action):
             return redirect("tickets:detail", pk=ticket.pk)
 
     ticket = get_object_or_404(visible_tickets(request.user), pk=pk)
-    context = ticket_detail_context(request.user, ticket)
-    context.update(
-        repair_context(
-            request.user, ticket, bound_form=form, action=action
-        )
+    context = ticket_detail_context(
+        request.user, ticket, repair_form=form, repair_action=action
     )
     context["repair_conflict"] = response_status == 409
     if context["repair_conflict"]:
