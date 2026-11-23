@@ -14,7 +14,12 @@ class TicketAssignmentConstraintMigrationTests(TransactionTestCase):
 
     def test_legacy_accepted_ticket_without_assignee_is_recoverable(self):
         executor = MigrationExecutor(connection)
+        latest = executor.loader.graph.leaf_nodes()
+        self.addCleanup(lambda: MigrationExecutor(connection).migrate(latest))
         executor.migrate([self.migrate_from])
+        HistoricalTicket = executor.loader.project_state(
+            [self.migrate_from]
+        ).apps.get_model("tickets", "Ticket")
 
         reporter = get_user_model().objects.create_user(
             username="legacy-ticket-reporter",
@@ -27,11 +32,11 @@ class TicketAssignmentConstraintMigrationTests(TransactionTestCase):
             building_type="teach",
         )
         category = FaultCategory.objects.create(name="旧数据迁移测试类别")
-        ticket = Ticket.objects.create(
+        ticket = HistoricalTicket.objects.create(
             number="CS202611140001",
-            reporter=reporter,
-            building=building,
-            fault_category=category,
+            reporter_id=reporter.pk,
+            building_id=building.pk,
+            fault_category_id=category.pk,
             title="旧版已受理但未分派工单",
             description="验证升级时不会因新增约束而失败。",
             location_kind=Ticket.LocationKind.ROOM,

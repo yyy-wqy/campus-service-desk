@@ -1,0 +1,99 @@
+<section class="surface-card">
+  <h2>维修处理</h2>
+  {% if repair_error_form.errors and not repair_conflict %}
+    <div class="form-alert" role="alert">{{ repair_error_form.errors }}</div>
+  {% endif %}
+  {% if repair_conflict %}
+    <div class="form-alert" role="alert">
+      {{ repair_error_form.non_field_errors }}
+      <p>工单信息已变化，本次操作未保存。请复制下方草稿，再重新加载详情核对最新状态后操作；草稿不会自动提交。</p>
+      <a class="button button-secondary" href="{% url 'tickets:detail' ticket.pk %}">重新加载工单详情</a>
+    </div>
+    <div class="ticket-form">
+    {% for draft in repair_draft_fields %}
+      <div class="field-group">
+        <label for="repair-draft-{{ draft.name }}">未保存的{{ draft.label }}（只读，可复制）</label>
+        <div class="field-control"><textarea id="repair-draft-{{ draft.name }}" rows="4" readonly>{{ draft.value|default_if_none:"" }}</textarea></div>
+      </div>
+    {% endfor %}
+    </div>
+  {% endif %}
+  {% if ticket.cancellation_pending %}
+    <p class="preview-notice">取消申请待审核，维修操作暂时冻结，仍可查看和追加说明。</p>
+  {% endif %}
+  <p>维修操作由当前维修人员执行，维修结果由原报修人确认。</p>
+
+  {% if can_start_repair and not repair_conflict %}
+    <form class="ticket-form" method="post" action="{% url 'tickets:repair_action' ticket.pk 'start' %}">
+      {% csrf_token %}
+      {% include "registration/recovery_fields.html" with form=repair_start_form %}
+      <button class="button button-primary" type="submit">开始维修</button>
+    </form>
+  {% endif %}
+
+  {% if can_add_repair_progress and not repair_conflict %}
+    <h3>追加维修进度</h3>
+    <form class="ticket-form" method="post" action="{% url 'tickets:repair_action' ticket.pk 'progress' %}">
+      {% csrf_token %}
+      {% include "registration/recovery_fields.html" with form=repair_progress_form %}
+      <button class="button button-secondary" type="submit">保存维修进度</button>
+    </form>
+  {% endif %}
+
+  {% if can_submit_repair_result and not repair_conflict %}
+    <h3>提交本轮维修结果</h3>
+    <form class="ticket-form" method="post" action="{% url 'tickets:repair_action' ticket.pk 'result' %}">
+      {% csrf_token %}
+      {% include "registration/recovery_fields.html" with form=repair_result_form %}
+      <button class="button button-primary" type="submit">提交维修结果</button>
+    </form>
+  {% endif %}
+
+  {% if can_confirm_repair_result and not repair_conflict %}
+    <h3>确认本轮维修结果</h3>
+    <p>请先核对下方本轮维修结果。选择“已解决”后工单将正式完成，不能继续提交维修进度或结果；选择“未解决”须填写原因，工单会退回继续维修。</p>
+    <form class="ticket-form" method="post" action="{% url 'tickets:repair_action' ticket.pk 'confirm' %}">
+      {% csrf_token %}
+      {% include "registration/recovery_fields.html" with form=repair_confirm_form %}
+      <button class="button button-primary" type="submit">提交确认决定</button>
+    </form>
+  {% endif %}
+</section>
+
+<section class="surface-card">
+  <h2>维修进度记录</h2>
+  {% for progress in repair_progress %}
+    <article>
+      <h3>第{{ progress.round_number }}轮进度</h3>
+      <p>维修人员：{{ progress.worker.real_name|default:progress.worker.username }}（{{ progress.worker.username }}）</p>
+      <time datetime="{{ progress.created_at|date:'c' }}">{{ progress.created_at|date:'Y-m-d H:i:s' }}</time>
+      <div class="description-text">{{ progress.content|linebreaksbr }}</div>
+    </article>
+  {% empty %}
+    <p>暂无维修进度记录。</p>
+  {% endfor %}
+</section>
+
+<section class="surface-card">
+  <h2>历轮维修结果与确认</h2>
+  {% for result in repair_results %}
+    <article>
+      <h3>第{{ result.round_number }}轮维修结果</h3>
+      <p>提交人：{{ result.worker.real_name|default:result.worker.username }}（{{ result.worker.username }}）</p>
+      <time datetime="{{ result.created_at|date:'c' }}">{{ result.created_at|date:'Y-m-d H:i:s' }}</time>
+      <div class="description-text">{{ result.content|linebreaksbr }}</div>
+      {% if result.confirmation %}
+        <p>确认决定：{{ result.confirmation.get_decision_display }}</p>
+        <p>确认人：{{ result.confirmation.reporter.real_name|default:result.confirmation.reporter.username }}（{{ result.confirmation.reporter.username }}）</p>
+        <time datetime="{{ result.confirmation.created_at|date:'c' }}">{{ result.confirmation.created_at|date:'Y-m-d H:i:s' }}</time>
+        {% if result.confirmation.reason %}
+          <div class="description-text">确认说明：{{ result.confirmation.reason|linebreaksbr }}</div>
+        {% endif %}
+      {% else %}
+        <p>尚无报修人确认记录。</p>
+      {% endif %}
+    </article>
+  {% empty %}
+    <p>尚未提交维修结果。</p>
+  {% endfor %}
+</section>

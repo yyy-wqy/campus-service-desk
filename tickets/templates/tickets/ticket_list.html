@@ -34,11 +34,24 @@
     {% for ticket in tickets %}
       <a class="ticket-row" href="{% url 'tickets:detail' ticket.pk %}">
         <div><strong>{{ ticket.title }}</strong><span>{{ ticket.number }}</span></div>
-        <div><span>{{ ticket.building_name_snapshot }} · {{ ticket.location_detail }}</span><small>{{ ticket.created_at|date:'Y-m-d H:i' }}</small></div>
-        <span class="ticket-status">{{ ticket.get_status_display }}</span>
-    {% if ticket.cancellation_pending %}
-      <span class="ticket-status">取消申请待审核</span>
-    {% endif %}
+        <div>
+          <span>{{ ticket.building_name_snapshot }} · {{ ticket.location_detail }}</span>
+          <small>提交时间：{{ ticket.created_at|date:'Y-m-d H:i' }}</small>
+          {% if user.role == 'maintenance' %}
+            <small>分派时间：{% if ticket.latest_assigned_at %}{{ ticket.latest_assigned_at|date:'Y-m-d H:i:s' }}{% else %}未记录{% endif %}</small>
+          {% endif %}
+        </div>
+        <div>
+          <span class="ticket-status">{{ ticket.get_status_display }}</span>
+          {% if ticket.priority == 'urgent' %}
+            <span class="ticket-priority-urgent">紧急任务</span>
+          {% else %}
+            <span>优先级：普通</span>
+          {% endif %}
+          {% if ticket.cancellation_pending %}
+            <span class="ticket-status">取消申请待审核</span>
+          {% endif %}
+        </div>
       </a>
     {% empty %}
       <div class="empty-state"><h2>暂无工单</h2><p>当前账号还没有可查看的工单。</p></div>
