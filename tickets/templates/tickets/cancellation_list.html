@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block title %}取消申请｜校园智办{% endblock %}
+
+{% block content %}
+  <section class="page-heading"><h1>取消申请</h1></section>
+  <div class="ticket-list">
+    {% for application in applications %}
+      <a class="ticket-row" href="{% url 'tickets:cancellation_review' application.pk %}">
+        <div><strong>{{ application.ticket.title }}</strong><span>{{ application.ticket.number }} · {{ application.ticket.get_status_display }}</span></div>
+        <div><span>{{ application.applicant.real_name|default:application.applicant.username }}</span><small>{{ application.created_at|date:'Y-m-d H:i' }}</small><span>{{ application.reason|default:'未填写申请原因'|truncatechars:60 }}</span></div>
+        <span class="ticket-status ticket-status-pending">待审核</span>
+      </a>
+    {% empty %}
+      <div class="empty-state"><h2>暂无待审核的取消申请</h2></div>
+    {% endfor %}
+  </div>
+{% endblock %}

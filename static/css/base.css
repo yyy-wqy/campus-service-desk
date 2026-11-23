@@ -223,6 +223,10 @@ svg { display: block; }
 .ticket-row span, .ticket-row small { color: var(--ink-600); font-size: 12px; }
 .ticket-status { display: inline-flex; justify-content: center; padding: 7px 11px; color: #236c54 !important; background: var(--mint-100); border: 1px solid #c3eadb; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap; }
 .ticket-status-large { padding: 9px 14px; }
+.ticket-status-group { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.ticket-status-pending { color: var(--amber-700) !important; background: var(--amber-100); border-color: #f5dfaf; }
+.cancellation-history { margin-top: 18px; overflow-wrap: anywhere; }
+.cancellation-history article + article { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); }
 .empty-state { padding: 64px 24px; color: var(--ink-600); background: var(--paper); border: 1px dashed #bfd0ca; border-radius: var(--radius-md); text-align: center; }
 .empty-state h2 { margin: 0 0 8px; color: var(--ink-900); }
 .empty-state p { margin: 0; }

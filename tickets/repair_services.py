@@ -1,6 +1,5 @@
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.db import connection, transaction
-from django.db.models import F
+from django.db import transaction
 
 from accounts.models import User
 
@@ -8,7 +7,7 @@ from .models import (
     RepairConfirmation, RepairProgress, RepairResult, Ticket, TicketHistory,
 )
 from .permissions import can_confirm_ticket, can_process_ticket, current_business_user
-from .services import _run_ticket_operation
+from .services import _run_ticket_operation, lock_ticket_for_workflow
 
 
 class RepairConflict(ValidationError):
@@ -22,12 +21,7 @@ def require_repair_unfrozen(ticket):
 
 
 def _lock_ticket(ticket_id):
-    if connection.vendor == "sqlite":
-        # SQLite先取得写锁，再读取状态、版本和当前处理人。
-        Ticket.objects.filter(pk=ticket_id).update(
-            updated_at=F("updated_at")
-        )
-    return Ticket.objects.select_for_update().get(pk=ticket_id)
+    return lock_ticket_for_workflow(ticket_id)
 
 
 def _current_actor(actor):

@@ -1,16 +1,19 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
+from django.db import DatabaseError
 from django.http import HttpResponseForbidden
 from django.db.models import OuterRef, Q, Subquery
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods, require_POST
 
-from .forms import TicketCreateForm
-from .models import Ticket, TicketHistory
+from .cancellations import can_request_cancellation, review_cancellation, submit_cancellation
+from .cancellation_http import retry_cancellation_request
+from .forms import CancellationRequestForm, CancellationReviewForm, TicketCreateForm
+from .models import Ticket, TicketCancellation, TicketHistory
 from .note_forms import TicketNoteForm
 from .note_services import can_add_ticket_note
-from .permissions import can_create_ticket, can_manage_ticket, visible_tickets
+from .permissions import can_confirm_ticket, can_create_ticket, can_manage_ticket, visible_tickets
 from .query_forms import TicketQueryForm
 from .repair_ui import repair_context
 from .services import (
@@ -111,6 +114,9 @@ def ticket_detail(request, pk):
 def ticket_detail_context(user, ticket, *, note_form=None):
     context = {
         "ticket": ticket,
+        "can_request_cancellation": can_confirm_ticket(user, ticket) and can_request_cancellation(ticket),
+        "can_review_cancellation": can_manage_ticket(user),
+        "cancellation_records": ticket.cancellations.select_related("applicant", "reviewer"),
         "history": ticket.history.select_related("actor").order_by("created_at", "pk"),
         "note_form": note_form if note_form is not None else TicketNoteForm(),
         "can_add_note": can_add_ticket_note(user, ticket),
@@ -220,3 +226,62 @@ def ticket_set_priority(request, pk):
         else:
             messages.success(request, "工单优先级已更新。")
     return redirect("tickets:detail", pk=pk)
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+@retry_cancellation_request
+def cancellation_request(request, pk):
+    ticket = get_object_or_404(visible_tickets(request.user), pk=pk)
+    if not can_confirm_ticket(request.user, ticket):
+        raise PermissionDenied
+    if not can_request_cancellation(ticket):
+        messages.error(request, "这张工单已有待审核的取消申请。" if ticket.cancellation_pending else "当前工单状态不可申请取消。")
+        return redirect("tickets:detail", pk=pk)
+    direct = ticket.status == Ticket.Status.PENDING_ACCEPTANCE
+    form = CancellationRequestForm(request.POST if request.method == "POST" else None, direct=direct)
+    if request.method == "POST" and form.is_valid():
+        try:
+            application = submit_cancellation(ticket=ticket, actor=request.user, reason=form.cleaned_data["reason"])
+        except ValidationError as exc:
+            form.add_error(None, exc)
+        except DatabaseError:
+            form.add_error(None, "取消提交失败，请稍后重试。")
+        else:
+            messages.success(request, "工单已取消。" if application.decision == TicketCancellation.Decision.DIRECT else "取消申请已提交，等待管理员审核。")
+            return redirect("tickets:detail", pk=pk)
+    return render(request, "tickets/cancellation_form.html", {"ticket": ticket, "form": form, "direct": direct})
+
+
+@login_required
+@require_http_methods(["GET"])
+@retry_cancellation_request
+def cancellation_list(request):
+    if not can_manage_ticket(request.user):
+        raise PermissionDenied
+    applications = TicketCancellation.objects.filter(decision=TicketCancellation.Decision.PENDING).select_related("ticket", "applicant")
+    return render(request, "tickets/cancellation_list.html", {"applications": applications})
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+@retry_cancellation_request
+def cancellation_review(request, application_id):
+    if not can_manage_ticket(request.user):
+        raise PermissionDenied
+    application = get_object_or_404(TicketCancellation.objects.select_related("ticket", "applicant"), pk=application_id)
+    if application.decision != TicketCancellation.Decision.PENDING:
+        messages.error(request, "这条取消申请已处理。")
+        return redirect("tickets:detail", pk=application.ticket_id)
+    form = CancellationReviewForm(request.POST if request.method == "POST" else None)
+    if request.method == "POST" and form.is_valid():
+        try:
+            review_cancellation(application=application, actor=request.user, **form.cleaned_data)
+        except ValidationError as exc:
+            form.add_error(None, exc)
+        except DatabaseError:
+            form.add_error(None, "审核保存失败，请稍后重试。")
+        else:
+            messages.success(request, "取消申请审核已保存。")
+            return redirect("tickets:cancellations")
+    return render(request, "tickets/cancellation_form.html", {"ticket": application.ticket, "application": application, "form": form})
