@@ -111,7 +111,9 @@ def ticket_detail(request, pk):
     )
 
 
-def ticket_detail_context(user, ticket, *, note_form=None):
+def ticket_detail_context(
+    user, ticket, *, note_form=None, repair_form=None, repair_action=None
+):
     context = {
         "ticket": ticket,
         "can_request_cancellation": can_confirm_ticket(user, ticket) and can_request_cancellation(ticket),
@@ -131,7 +133,9 @@ def ticket_detail_context(user, ticket, *, note_form=None):
                 "assignment_form": TicketAssignmentForm(),
             }
         )
-    context.update(repair_context(user, ticket))
+    context.update(
+        repair_context(user, ticket, bound_form=repair_form, action=repair_action)
+    )
     return context
 
 
