@@ -1,4 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
+from html.parser import HTMLParser
 from threading import Barrier
 from unittest.mock import patch
 
@@ -26,6 +27,52 @@ FAST_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 
 @override_settings(PASSWORD_HASHERS=FAST_HASHERS)
 class CancellationWorkflowTests(TicketFixtureMixin, TestCase):
+    def test_detail_title_contains_only_ticket_number_and_platform_name(self):
+        class TitleParser(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.in_title = False
+                self.text = []
+
+            def handle_starttag(self, tag, attrs):
+                if tag == "title":
+                    self.in_title = True
+
+            def handle_endtag(self, tag):
+                if tag == "title":
+                    self.in_title = False
+
+            def handle_data(self, data):
+                if self.in_title:
+                    self.text.append(data)
+
+        ticket = self.assigned_ticket()
+        application = None
+        for stage in ("initial", "pending", "rejected", "approved"):
+            if stage == "pending":
+                application = submit_cancellation(
+                    ticket=ticket, actor=self.student, reason="申请原因 <不能进入标题>",
+                )
+            elif stage == "rejected":
+                review_cancellation(application=application, actor=self.admin,
+                                    decision="rejected", reason="审核说明不能进入标题")
+            elif stage == "approved":
+                application = submit_cancellation(ticket=ticket, actor=self.student)
+                review_cancellation(application=application, actor=self.admin, decision="approved")
+            for actor in (self.student, self.admin):
+                with self.subTest(stage=stage, role=actor.role):
+                    self.client.force_login(actor)
+                    response = self.client.get(reverse("tickets:detail", args=[ticket.pk]))
+                    self.assertEqual(response.status_code, 200)
+                    parser = TitleParser()
+                    parser.feed(response.content.decode())
+                    self.assertEqual("".join(parser.text), f"{ticket.number}｜校园智办")
+                    if stage != "initial":
+                        self.assertContains(response, 'class="surface-card cancellation-history"', count=1)
+                        self.assertContains(response, "申请原因 &lt;不能进入标题&gt;")
+                    if stage == "pending" and actor == self.admin:
+                        self.assertContains(response, "审核这条申请", count=1)
+
     def assigned_ticket(self, status=Ticket.Status.PENDING_WORK):
         ticket = self.create_valid_ticket()
         ticket.status = status
