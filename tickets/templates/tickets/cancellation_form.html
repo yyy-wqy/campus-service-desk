@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block title %}{% if application %}审核取消申请{% elif direct %}取消工单{% else %}申请取消{% endif %}｜校园智办{% endblock %}
+
+{% block content %}
+  <section class="page-heading">
+    <h1>{% if application %}审核取消申请{% elif direct %}取消工单{% else %}申请取消{% endif %}</h1>
+    <p>{{ ticket.number }} · {{ ticket.title }} · {{ ticket.get_status_display }}</p>
+    {% if application %}
+      <p>{{ application.applicant.real_name|default:application.applicant.username }} 于 {{ application.created_at|date:'Y-m-d H:i' }} 申请取消。</p>
+      <p class="description-text">{{ application.reason|default:'申请人未填写原因'|linebreaksbr }}</p>
+    {% elif direct %}
+      <p>提交后工单将变为已取消。</p>
+    {% else %}
+      <p>提交后由管理员审核，审核期间工单保留当前状态，暂停维修操作，仍可查看和追加说明。</p>
+    {% endif %}
+  </section>
+  <form class="ticket-form surface-card" method="post">
+    {% csrf_token %}
+    {% if form.non_field_errors %}<div class="form-alert" role="alert">{{ form.non_field_errors }}</div>{% endif %}
+    {% for field in form %}
+      <div class="field-group">
+        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+        {{ field }}
+        {% if field.help_text %}<div class="field-help" id="{{ field.auto_id }}_helptext">{{ field.help_text }}</div>{% endif %}
+        {% if field.errors %}<div class="field-error" role="alert">{{ field.errors }}</div>{% endif %}
+      </div>
+    {% endfor %}
+    <div class="form-actions">
+      <a class="button button-secondary" href="{% url 'tickets:detail' ticket.pk %}">返回工单</a>
+      <button class="button button-primary" type="submit">{% if application %}提交审核{% elif direct %}确认取消{% else %}提交申请{% endif %}</button>
+    </div>
+  </form>
+{% endblock %}

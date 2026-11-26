@@ -9,6 +9,7 @@ from django.urls import reverse
 from accounts.models import MaintenanceApplication, MaintenanceMaterial
 from locations.models import Building, FaultCategory
 
+from .cancellations import submit_cancellation
 from .models import Ticket, TicketHistory
 from .permissions import (
     can_confirm_ticket,
@@ -380,10 +381,8 @@ class AdminTicketWorkflowTests(TestCase):
                         room_number="A101",
                     )
                 with self.assertRaises(PermissionDenied):
-                    transition_ticket(
-                        ticket=ticket,
-                        actor=student,
-                        to_status=Ticket.Status.CANCELLED,
+                    submit_cancellation(
+                        ticket=ticket, actor=student, reason="取消",
                     )
                 ticket.refresh_from_db()
                 self.assertEqual(ticket.status, Ticket.Status.PENDING_ACCEPTANCE)

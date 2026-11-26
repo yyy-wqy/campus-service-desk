@@ -9,7 +9,7 @@ from locations.scope import (
     validate_repair_scope,
 )
 
-from .models import Ticket
+from .models import Ticket, TicketCancellation
 from .services import create_ticket
 
 
@@ -114,3 +114,31 @@ class TicketCreateForm(forms.Form):
             public_area_other=self.cleaned_data["public_area_other"],
             preferred_visit_time=self.cleaned_data["preferred_visit_time"],
         )
+
+
+class CancellationRequestForm(forms.Form):
+    reason = forms.CharField(label="取消原因", max_length=1000, widget=forms.Textarea(attrs={"rows": 4}))
+
+    def __init__(self, *args, direct, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["reason"].required = direct
+        if not direct:
+            self.fields["reason"].label = "取消原因（选填）"
+
+
+class CancellationReviewForm(forms.Form):
+    decision = forms.ChoiceField(label="审核结果", choices=[
+        ("", "请选择审核结果"),
+        (TicketCancellation.Decision.APPROVED, "批准取消"),
+        (TicketCancellation.Decision.REJECTED, "驳回申请"),
+    ])
+    reason = forms.CharField(
+        label="审核说明", max_length=1000, required=False,
+        help_text="驳回时必须填写原因。", widget=forms.Textarea(attrs={"rows": 4}),
+    )
+
+    def clean(self):
+        data = super().clean()
+        if data.get("decision") == TicketCancellation.Decision.REJECTED and not data.get("reason"):
+            self.add_error("reason", "驳回时必须填写原因。")
+        return data

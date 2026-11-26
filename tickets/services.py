@@ -1,7 +1,7 @@
 import time
 
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.db import DatabaseError, OperationalError, transaction
+from django.db import DatabaseError, OperationalError, connection, transaction
 from django.db.models import F
 from django.utils import timezone
 
@@ -170,15 +170,12 @@ def create_ticket(**kwargs):
 ALLOWED_STATUS_TRANSITIONS = {
     Ticket.Status.PENDING_ACCEPTANCE: {
         Ticket.Status.REJECTED,
-        Ticket.Status.CANCELLED,
     },
     Ticket.Status.PENDING_WORK: {
         Ticket.Status.IN_PROGRESS,
-        Ticket.Status.CANCELLED,
     },
     Ticket.Status.IN_PROGRESS: {
         Ticket.Status.PENDING_CONFIRMATION,
-        Ticket.Status.CANCELLED,
     },
     Ticket.Status.PENDING_CONFIRMATION: {
         Ticket.Status.IN_PROGRESS,
@@ -187,11 +184,18 @@ ALLOWED_STATUS_TRANSITIONS = {
 }
 
 
+def lock_ticket_for_workflow(ticket_id):
+    """Read the current ticket after acquiring its workflow write lock."""
+    if connection.vendor == "sqlite":
+        Ticket.objects.filter(pk=ticket_id).update(updated_at=F("updated_at"))
+    return Ticket.objects.select_for_update().get(pk=ticket_id)
+
+
 def _transition_ticket_once(*, ticket, actor, to_status, description="", metadata=None):
     if to_status not in ALLOWED_STATUS_TRANSITIONS.get(ticket.status, set()):
         raise ValidationError({"status": "不允许执行该工单状态变更。"})
     with transaction.atomic():
-        locked = Ticket.objects.select_for_update().get(pk=ticket.pk)
+        locked = lock_ticket_for_workflow(ticket.pk)
         current_actor = (
             User.objects.select_for_update()
             .filter(pk=getattr(actor, "pk", None))
@@ -280,8 +284,8 @@ def accept_and_assign_ticket(*, ticket, actor, worker):
 
     def operation():
         with transaction.atomic():
+            locked = lock_ticket_for_workflow(ticket.pk)
             manager = _current_manager(actor)
-            locked = Ticket.objects.select_for_update().get(pk=ticket.pk)
             if locked.status != Ticket.Status.PENDING_ACCEPTANCE:
                 raise ValidationError(
                     {"worker": "只有待受理工单可以受理并首次分派。"}
@@ -350,8 +354,8 @@ def set_ticket_priority(*, ticket, actor, priority):
 
     def operation():
         with transaction.atomic():
+            locked = lock_ticket_for_workflow(ticket.pk)
             manager = _current_manager(actor)
-            locked = Ticket.objects.select_for_update().get(pk=ticket.pk)
             if locked.status not in PRIORITY_EDITABLE_STATUSES:
                 raise ValidationError(
                     {"priority": "只有待受理或待处理工单可以修改优先级。"}

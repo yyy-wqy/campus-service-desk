@@ -232,6 +232,38 @@ class Ticket(models.Model):
         return super().save(*args, **kwargs)
 
 
+class TicketCancellation(models.Model):
+    class Decision(models.TextChoices):
+        DIRECT = "direct", "报修人自行取消"
+        PENDING = "pending", "待审核"
+        APPROVED = "approved", "已批准"
+        REJECTED = "rejected", "已驳回"
+
+    ticket = models.ForeignKey(Ticket, on_delete=models.PROTECT, related_name="cancellations")
+    applicant = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="requested_ticket_cancellations"
+    )
+    reason = models.CharField("申请原因", max_length=1000, blank=True)
+    created_at = models.DateTimeField("申请时间", auto_now_add=True)
+    decision = models.CharField("审核结果", max_length=10, choices=Decision.choices, default=Decision.PENDING)
+    reviewer = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="reviewed_ticket_cancellations",
+        null=True, blank=True,
+    )
+    review_reason = models.CharField("审核说明", max_length=1000, blank=True)
+    reviewed_at = models.DateTimeField("审核时间", null=True, blank=True)
+
+    class Meta:
+        ordering = ("-created_at", "-pk")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("ticket",),
+                condition=models.Q(decision="pending"),
+                name="ticket_one_pending_cancellation",
+            ),
+        ]
+
+
 class AppendOnlyHistoryQuerySet(models.QuerySet):
     def update(self, **kwargs):
         raise TypeError("工单历史只能追加，不能更新。")

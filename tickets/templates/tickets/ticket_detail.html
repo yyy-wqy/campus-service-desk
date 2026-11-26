@@ -9,10 +9,12 @@
       <h1>{{ ticket.title }}</h1>
       <p>提交于 {{ ticket.created_at|date:'Y-m-d H:i' }}</p>
     </div>
-    <span class="ticket-status ticket-status-large">{{ ticket.get_status_display }}</span>
-    {% if ticket.cancellation_pending %}
-      <span class="ticket-status">取消申请待审核</span>
-    {% endif %}
+    <div class="ticket-status-group">
+      <span class="ticket-status ticket-status-large">{{ ticket.get_status_display }}</span>
+      {% if ticket.cancellation_pending %}
+        <span class="ticket-status ticket-status-pending">取消申请待审核</span>
+      {% endif %}
+    </div>
   </section>
 
   <div class="detail-grid">
@@ -86,5 +88,28 @@
   {% include "tickets/_repair_workflow.html" %}
   {% include "tickets/_history.html" %}
   {% include "tickets/_note_form.html" %}
-  <div class="form-actions"><a class="button button-secondary" href="{% url 'tickets:list' %}">返回列表</a></div>
+  {% if cancellation_records %}
+    <section class="surface-card cancellation-history">
+      <h2>取消记录</h2>
+      {% for record in cancellation_records %}
+        <article>
+          <h3>{{ record.get_decision_display }}</h3>
+          <p>{{ record.applicant.real_name|default:record.applicant.username }} · {{ record.created_at|date:'Y-m-d H:i' }}</p>
+          <p class="description-text">{{ record.reason|default:'未填写申请原因'|linebreaksbr }}</p>
+          {% if record.reviewed_at %}
+            <p>{{ record.reviewer.real_name|default:record.reviewer.username }} · {{ record.reviewed_at|date:'Y-m-d H:i' }}</p>
+            {% if record.review_reason %}<p class="description-text">{{ record.review_reason|linebreaksbr }}</p>{% endif %}
+          {% elif can_review_cancellation and record.decision == 'pending' %}
+            <a class="button button-secondary" href="{% url 'tickets:cancellation_review' record.pk %}">审核这条申请</a>
+          {% endif %}
+        </article>
+      {% endfor %}
+    </section>
+  {% endif %}
+  <div class="form-actions">
+    <a class="button button-secondary" href="{% url 'tickets:list' %}">返回列表</a>
+    {% if can_request_cancellation %}
+      <a class="button button-secondary" href="{% url 'tickets:cancellation_request' ticket.pk %}">{% if ticket.status == 'pending_acceptance' %}取消工单{% else %}申请取消{% endif %}</a>
+    {% endif %}
+  </div>
 {% endblock %}

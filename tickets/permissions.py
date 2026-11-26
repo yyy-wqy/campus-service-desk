@@ -76,18 +76,12 @@ def can_transition_ticket(user, ticket, to_status):
     if ticket.status == Ticket.Status.PENDING_ACCEPTANCE:
         if to_status == Ticket.Status.REJECTED:
             return can_manage_ticket(user)
-        if to_status == Ticket.Status.CANCELLED:
-            return can_confirm_ticket(user, ticket)
     if ticket.status == Ticket.Status.PENDING_WORK:
         if to_status == Ticket.Status.IN_PROGRESS:
             return can_process_ticket(user, ticket)
-        if to_status == Ticket.Status.CANCELLED:
-            return can_manage_ticket(user)
     if ticket.status == Ticket.Status.IN_PROGRESS:
         if to_status == Ticket.Status.PENDING_CONFIRMATION:
             return can_process_ticket(user, ticket)
-        if to_status == Ticket.Status.CANCELLED:
-            return can_manage_ticket(user)
     if ticket.status == Ticket.Status.PENDING_CONFIRMATION:
         if to_status in {Ticket.Status.IN_PROGRESS, Ticket.Status.COMPLETED}:
             return can_confirm_ticket(user, ticket)
