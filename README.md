@@ -89,3 +89,14 @@ node --test tests/js/register.test.cjs
 
 数据库结构更新后运行 `python manage.py migrate`。提交代码前可执行 `python manage.py makemigrations --check --dry-run` 检查是否遗漏迁移文件。
 
+## 备份、日志和交付验收
+
+运行保障与恢复步骤见 [运维说明](docs/operations.md)，本次实测与未完成项见 [Issue #25 验收记录](docs/issue-25-validation.md)。
+
+```powershell
+# 备份数据库和两类附件，保留最近7个成功备份日
+.\.venv\Scripts\python.exe manage.py backup_site
+# 管理员 PowerShell：安装每天03:00执行的备份计划
+.\tools\install_backup_task.ps1
+```
+

@@ -19,7 +19,12 @@ _locks = [threading.RLock() for _ in range(64)]
 
 def protected_clean(form, authenticate_clean):
     with _locks[hash(form.cleaned_data.get("username", "")) % len(_locks)]:
-        return _retry_clean(form, authenticate_clean)
+        try:
+            return _retry_clean(form, authenticate_clean)
+        except ValidationError:
+            from core.operational_logging import login_failure
+            login_failure(None, {"username": form.cleaned_data.get("username", "")}, form.request)
+            raise
 
 
 def _retry_clean(form, authenticate_clean):

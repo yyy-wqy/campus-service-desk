@@ -1,0 +1,35 @@
+{
+  "platform": "Windows-11-10.0.26300-SP0",
+  "cpu": "Intel64 Family 6 Model 183 Stepping 1, GenuineIntel",
+  "logical_cpus": 20,
+  "duration_seconds": 300,
+  "virtual_users": 20,
+  "think_seconds": 0.25,
+  "seed_users": 20,
+  "seed_tickets": 200,
+  "requests": 13153,
+  "unexpected_responses": 0,
+  "p95_seconds_all": 0.513781,
+  "p95_seconds_success": 0.513781,
+  "operations": {
+    "append_note": {
+      "requests": 2625,
+      "p95_seconds": 0.644144
+    },
+    "role_page": {
+      "requests": 2628,
+      "p95_seconds": 0.305866
+    },
+    "detail": {
+      "requests": 5260,
+      "p95_seconds": 0.371199
+    },
+    "list": {
+      "requests": 2640,
+      "p95_seconds": 0.340856
+    }
+  },
+  "unexpected_ratio": 0.0,
+  "latency_requirement_met": true,
+  "physical_memory_bytes": 25551560704
+}

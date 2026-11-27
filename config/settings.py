@@ -90,7 +90,7 @@ WSGI_APPLICATION = "config.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+        "NAME": os.environ.get("DJANGO_DATABASE_PATH", BASE_DIR / "db.sqlite3"),
     }
 }
 
@@ -133,8 +133,8 @@ STATIC_URL = "static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 
 MEDIA_URL = "media/"
-MEDIA_ROOT = BASE_DIR / "media"
-PRIVATE_DOCUMENT_ROOT = BASE_DIR / "private_documents"
+MEDIA_ROOT = Path(os.environ.get("DJANGO_MEDIA_ROOT", BASE_DIR / "media"))
+PRIVATE_DOCUMENT_ROOT = Path(os.environ.get("DJANGO_PRIVATE_DOCUMENT_ROOT", BASE_DIR / "private_documents"))
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
@@ -162,3 +162,22 @@ EMAIL_USE_TLS = os.environ.get("DJANGO_EMAIL_USE_TLS", "False").lower() in {"1",
 EMAIL_USE_SSL = os.environ.get("DJANGO_EMAIL_USE_SSL", "False").lower() in {"1", "true", "yes"}
 EMAIL_TIMEOUT = 10
 PASSWORD_RESET_TIMEOUT = 3600
+
+OPERATIONS_ROOT = Path(os.environ.get("DJANGO_OPERATIONS_ROOT", BASE_DIR / ".runtime"))
+BACKUP_ROOT = Path(os.environ.get("DJANGO_BACKUP_ROOT", OPERATIONS_ROOT / "backups"))
+LOG_ROOT = Path(os.environ.get("DJANGO_LOG_ROOT", OPERATIONS_ROOT / "logs"))
+MIDDLEWARE.insert(0, "core.operational_logging.OperationalLoggingMiddleware")
+LOGGING = {
+    "version": 1, "disable_existing_loggers": False,
+    "handlers": {
+        "application_file": {"class": "core.operational_logging.DailyJSONHandler", "channel": "application"},
+        "security_file": {"class": "core.operational_logging.DailyJSONHandler", "channel": "security"},
+    },
+    "loggers": {
+        "operations": {"handlers": ["application_file"], "level": "INFO", "propagate": False},
+        "security": {"handlers": ["security_file"], "level": "INFO", "propagate": False},
+        "django.request": {"handlers": ["application_file"], "level": "WARNING", "propagate": False},
+        "django.security": {"handlers": ["security_file"], "level": "WARNING", "propagate": False},
+        "django.server": {"handlers": ["application_file"], "level": "INFO", "propagate": False},
+    },
+}

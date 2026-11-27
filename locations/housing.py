@@ -61,6 +61,15 @@ def get_housing(student):
     )
 
 
+def get_housing_history(student):
+    """Materialize history within the same bounded read-lock retry policy."""
+    return _run_with_lock_retry(lambda: list(
+        HousingChangeLog.objects.filter(student=student)
+        .select_related("actor", "from_building", "to_building")
+        .order_by("-created_at", "-pk")
+    ))
+
+
 def _check_target(building):
     if building.building_type != DORM:
         raise ValidationError({"building": "住宿楼栋只能选择宿舍楼。"})
