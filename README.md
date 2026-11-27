@@ -91,12 +91,7 @@ node --test tests/js/register.test.cjs
 
 ## 备份、日志和交付验收
 
-运行保障与恢复步骤见 [运维说明](docs/operations.md)，本次实测与未完成项见 [Issue #25 验收记录](docs/issue-25-validation.md)。
+开发验收使用独立数据库和合成附件，复现步骤与结果见 [运维说明](docs/operations.md#重新执行验收) 和 [Issue #25 验收记录](docs/issue-25-validation.md)。
 
-```powershell
-# 备份数据库和两类附件，保留最近7个成功备份日
-.\.venv\Scripts\python.exe manage.py backup_site
-# 管理员 PowerShell：安装每天03:00执行的备份计划
-.\tools\install_backup_task.ps1
-```
+部署负责人可在选定的部署环境中按 [每日计划说明](docs/operations.md#每日计划) 配置自动备份。
 
