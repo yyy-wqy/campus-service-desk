@@ -89,3 +89,9 @@ node --test tests/js/register.test.cjs
 
 数据库结构更新后运行 `python manage.py migrate`。提交代码前可执行 `python manage.py makemigrations --check --dry-run` 检查是否遗漏迁移文件。
 
+## 备份、日志和交付验收
+
+开发验收使用独立数据库和合成附件，复现步骤与结果见 [运维说明](docs/operations.md#重新执行验收) 和 [Issue #25 验收记录](docs/issue-25-validation.md)。
+
+部署负责人可在选定的部署环境中按 [每日计划说明](docs/operations.md#每日计划) 配置自动备份。
+

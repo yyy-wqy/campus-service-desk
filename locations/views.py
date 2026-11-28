@@ -19,6 +19,7 @@ from .forms import (
 from .housing import (
     change_own_building,
     get_housing,
+    get_housing_history,
     next_allowed_change,
     set_building_by_admin,
 )
@@ -47,11 +48,7 @@ def housing(request):
 
     try:
         current = get_housing(request.user)
-        history = list(
-            request.user.housing_changes.select_related(
-                "actor", "from_building", "to_building"
-            ).order_by("-created_at", "-pk")
-        )
+        history = get_housing_history(request.user)
     except ValidationError as exc:
         # 并发写锁读取失败：给可读提示，不返回 500。
         messages.error(request, exc.messages[0])

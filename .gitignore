@@ -17,6 +17,8 @@ db.sqlite3
 db.sqlite3-journal
 media/
 private_documents/
+.runtime/
+validation-results/
 
 # Test and tool caches
 .pytest_cache/

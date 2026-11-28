@@ -1,0 +1,16 @@
+{
+  "time": "2026-11-27T02:53:37.366380+00:00",
+  "operator": "Winnie",
+  "platform": "Windows-11-10.0.26300-SP0",
+  "backup": ".runtime/validation/run-delivery/operations/backups/2026-11-27",
+  "restored": ".runtime/validation/run-restored-1795748015014117500",
+  "manifest_verified": true,
+  "source_database_unchanged": true,
+  "users": 32,
+  "tickets": 212,
+  "history": 3305,
+  "reviews": 8,
+  "material_files_verified": 30,
+  "pages": "passed",
+  "private_permissions": "passed"
+}
