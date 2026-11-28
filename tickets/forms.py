@@ -11,9 +11,11 @@ from locations.scope import (
 
 from .models import Ticket, TicketCancellation
 from .services import create_ticket
+from .photo_forms import PhotoField
 
 
 class TicketCreateForm(forms.Form):
+    photos = PhotoField()
     building = forms.ModelChoiceField(
         label="楼栋",
         queryset=Building.objects.none(),
@@ -104,6 +106,7 @@ class TicketCreateForm(forms.Form):
             raise ValueError("只能保存已通过校验的工单表单。")
         return create_ticket(
             reporter=self.reporter,
+            photos=self.cleaned_data["photos"],
             building=self.cleaned_data["building"],
             fault_category=self.cleaned_data["fault_category"],
             title=self.cleaned_data["title"],

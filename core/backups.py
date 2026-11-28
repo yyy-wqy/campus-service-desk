@@ -89,6 +89,7 @@ def verify_backup(folder):
         if database.execute("PRAGMA foreign_key_check").fetchall():
             raise ValueError("SQLite 外键检查失败。")
         verify_private_materials(database, manifest["files"])
+        verify_ticket_photos(database, manifest["files"])
     return manifest
 
 
@@ -104,6 +105,18 @@ def verify_private_materials(database, files):
             raise ValueError("有应保留的私有附件缺失。")
         if stored_file["bytes"] != size or stored_file["sha256"] != sha256:
             raise ValueError("私有附件与数据库记录不一致。")
+
+
+def verify_ticket_photos(database, files):
+    # Pre-photo backups remain restorable; new snapshots verify every retained photo.
+    if not database.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='tickets_ticketphoto'").fetchone():
+        return
+    for name, size, checksum in database.execute(
+        "SELECT storage_name, size, sha256 FROM tickets_ticketphoto WHERE disposed_at IS NULL"
+    ):
+        entry = files.get(f"private_documents/ticket_photos/{name}")
+        if entry is None or entry["bytes"] != size or entry["sha256"] != checksum:
+            raise ValueError("应保留的工单照片缺失或与数据库不一致。")
 
 
 def remove_owned_tree(path, root):

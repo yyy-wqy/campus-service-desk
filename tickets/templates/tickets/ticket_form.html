@@ -9,7 +9,7 @@
     <p>请准确填写故障位置与现象。提交后原始信息将保留，补充内容会以历史记录追加。</p>
   </section>
 
-  <form class="ticket-form surface-card" method="post" novalidate>
+  <form class="ticket-form surface-card" method="post" enctype="multipart/form-data" novalidate>
     {% csrf_token %}
     {% if form.non_field_errors %}<div class="form-alert">{{ form.non_field_errors }}</div>{% endif %}
     <div class="form-grid">

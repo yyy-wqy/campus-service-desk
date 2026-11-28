@@ -80,8 +80,11 @@ def _create_ticket_once(
     public_area=None,
     public_area_other="",
     preferred_visit_time="",
+    validated_photos=(),
 ):
-    with transaction.atomic():
+    from .photo_services import photo_write_batch, persist_photos
+
+    with photo_write_batch() as saved_photos, transaction.atomic(durable=True):
         reporter = require_create_permission(reporter)
         normalized_location = validate_repair_scope(
             reporter=reporter,
@@ -137,6 +140,7 @@ def _create_ticket_once(
             raise TicketCreationFailed(
                 "工单暂时无法提交，请稍后重试。"
             ) from exc
+        persist_photos(ticket, reporter, validated_photos, saved_photos)
         return ticket
 
 
@@ -147,6 +151,8 @@ def create_ticket(**kwargs):
     parallel submissions reliable without hiding other database errors.
     """
 
+    from .photo_forms import validate_photos
+    kwargs["validated_photos"] = validate_photos(kwargs.pop("photos", ()))
     for attempt in range(5):
         try:
             return _create_ticket_once(**kwargs)
@@ -160,7 +166,7 @@ def create_ticket(**kwargs):
                     "系统暂时繁忙，请稍后重试。"
                 ) from exc
             time.sleep(0.02 * (attempt + 1))
-        except DatabaseError as exc:
+        except (DatabaseError, OSError) as exc:
             raise TicketCreationFailed(
                 "工单暂时无法提交，请稍后重试。"
             ) from exc
