@@ -14,6 +14,8 @@ import uuid
 from django.conf import settings
 from django.utils import timezone
 
+from accounts.models import MaintenanceMaterial
+
 from .private_files import outside_uploads, private_directory
 
 
@@ -86,7 +88,22 @@ def verify_backup(folder):
             raise ValueError("SQLite 完整性检查失败。")
         if database.execute("PRAGMA foreign_key_check").fetchall():
             raise ValueError("SQLite 外键检查失败。")
+        verify_private_materials(database, manifest["files"])
     return manifest
+
+
+def verify_private_materials(database, files):
+    # Query the snapshot, not the live ORM connection. Retired files are still
+    # retained for review history until they are formally disposed of.
+    table = MaintenanceMaterial._meta.db_table
+    for name, size, sha256 in database.execute(
+        f'SELECT storage_name, size, sha256 FROM "{table}" WHERE disposed_at IS NULL'
+    ):
+        stored_file = files.get(f"private_documents/{name}")
+        if stored_file is None:
+            raise ValueError("有应保留的私有附件缺失。")
+        if stored_file["bytes"] != size or stored_file["sha256"] != sha256:
+            raise ValueError("私有附件与数据库记录不一致。")
 
 
 def remove_owned_tree(path, root):
@@ -100,10 +117,11 @@ def create_backup():
     if settings.DATABASES["default"]["ENGINE"] != "django.db.backends.sqlite3":
         raise ValueError("本工具仅支持 SQLite。")
     sources = [settings.MEDIA_ROOT, settings.PRIVATE_DOCUMENT_ROOT]
-    root = private_directory(outside_uploads(settings.BACKUP_ROOT, sources))
+    root = outside_uploads(settings.BACKUP_ROOT, sources)
     database_path = Path(settings.DATABASES["default"]["NAME"]).resolve()
     if not database_path.is_file() or database_path.is_relative_to(root):
         raise ValueError("源数据库不存在或位于备份目录内。")
+    private_directory(root)
     day = timezone.localdate().isoformat()
     staging = root / (".staging-" + uuid.uuid4().hex)
     previous = root / (".previous-" + uuid.uuid4().hex)

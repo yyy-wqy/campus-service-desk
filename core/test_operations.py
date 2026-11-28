@@ -1,9 +1,11 @@
 from datetime import date, timedelta
+import hashlib
 import json
 import logging
+import os
 from pathlib import Path
-import sqlite3
 from tempfile import TemporaryDirectory
+from unittest import skipUnless
 from unittest.mock import patch
 
 from django.test import SimpleTestCase, TestCase, override_settings
@@ -12,6 +14,7 @@ from django.utils import timezone
 from accounts.models import User
 from .backups import create_backup, restore_backup, sqlite_connection, verify_backup
 from .operational_logging import DailyJSONHandler
+from .private_files import private_directory
 
 
 class BackupTests(SimpleTestCase):
@@ -23,6 +26,18 @@ class BackupTests(SimpleTestCase):
         with sqlite_connection(self.db) as connection:
             connection.execute("CREATE TABLE history (value TEXT)")
             connection.execute("INSERT INTO history VALUES ('business history')")
+            connection.execute(
+                "CREATE TABLE accounts_maintenancematerial "
+                "(storage_name TEXT, size INTEGER, sha256 TEXT, disposed_at TEXT)"
+            )
+            connection.executemany(
+                "INSERT INTO accounts_maintenancematerial VALUES (?, ?, ?, ?)",
+                [
+                    ("proof.pdf", len(b"private-proof"),
+                     hashlib.sha256(b"private-proof").hexdigest(), None),
+                    ("disposed.pdf", 12, "unused", "2026-01-01"),
+                ],
+            )
         self.media, self.private = self.root / "media", self.root / "private"
         self.media.mkdir(); self.private.mkdir()
         (self.private / "proof.pdf").write_bytes(b"private-proof")
@@ -68,6 +83,29 @@ class BackupTests(SimpleTestCase):
             restore_backup(backup, self.root / "restored")
         self.assertFalse((self.root / "restored").exists())
 
+    def test_missing_private_directory_does_not_replace_same_day_backup(self):
+        backup = create_backup()
+        old_manifest = (backup / "manifest.json").read_bytes()
+        self.private.rename(self.root / "temporarily-unavailable")
+
+        with self.assertRaisesMessage(ValueError, "有应保留的私有附件缺失"):
+            create_backup()
+
+        self.assertEqual((backup / "manifest.json").read_bytes(), old_manifest)
+        self.assertEqual((backup / "private_documents/proof.pdf").read_bytes(), b"private-proof")
+        verify_backup(backup)
+        self.assertFalse(list(self.backups.glob(".staging-*")))
+
+    def test_individual_missing_or_changed_material_rejects_backup(self):
+        proof = self.private / "proof.pdf"
+        proof.unlink()
+        with self.assertRaisesMessage(ValueError, "有应保留的私有附件缺失"):
+            create_backup()
+        # Same size as the expected attachment; checksum verification must still fail.
+        proof.write_bytes(b"changed-proof")
+        with self.assertRaisesMessage(ValueError, "私有附件与数据库记录不一致"):
+            create_backup()
+
     def test_failed_copy_keeps_previous_backup_and_records_failure(self):
         backup = create_backup()
         with patch("core.backups.copy_tree", side_effect=OSError("sensitive details")):
@@ -108,6 +146,35 @@ class LogRetentionTests(SimpleTestCase):
             for secret in ("secret-password", "private-token", "private-upload-contents", "secret=123"):
                 self.assertNotIn(secret, payload)
             self.assertEqual(json.loads(payload)["level"], "ERROR")
+
+
+@skipUnless(os.name == "nt", "Windows DACL regression")
+class PrivateWindowsDirectoryTests(SimpleTestCase):
+    def test_existing_directory_and_file_lose_explicit_everyone_permissions(self):
+        from .windows_acl import SecurityAPI
+
+        with TemporaryDirectory() as folder:
+            root = Path(folder) / "验收目录"
+            root.mkdir()
+            file = root / "backup.txt"
+            file.write_text("synthetic", encoding="utf-8")
+            api = SecurityAPI()
+            self.assertRegex(api.user_sid(), r"^S-1-\d+(?:-\d+)+$")
+            for path, kind in ((root, "OICI"), (file, "")):
+                api.replace_dacl(
+                    path, f"D:P(A;{kind};FA;;;{api.user_sid()})(A;{kind};FA;;;SY)(A;{kind};FR;;;WD)"
+                )
+                self.assertIn(";;;WD)", api.file_dacl(path))
+
+            with patch("subprocess.check_output", side_effect=AssertionError("No account-name decoding")):
+                self.assertEqual(private_directory(root), root.resolve())
+
+            for path in (root, file):
+                dacl = api.file_dacl(path)
+                self.assertTrue(dacl.startswith("D:P"))
+                self.assertNotIn(";;;WD)", dacl)
+                self.assertIn(";;;SY)", dacl)
+            self.assertEqual(file.read_text(encoding="utf-8"), "synthetic")
 
 
 @override_settings(PASSWORD_HASHERS=["django.contrib.auth.hashers.MD5PasswordHasher"])
