@@ -264,6 +264,37 @@ class TicketCancellation(models.Model):
         ]
 
 
+class TicketPhoto(models.Model):
+    ticket = models.ForeignKey(Ticket, on_delete=models.PROTECT, related_name="photos")
+    uploader = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    storage_name = models.CharField(max_length=200, unique=True, editable=False)
+    original_name = models.CharField(max_length=200)
+    content_type = models.CharField(max_length=30)
+    size = models.PositiveIntegerField()
+    sha256 = models.CharField(max_length=64)
+    created_at = models.DateTimeField(auto_now_add=True)
+    disposed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ("created_at", "pk")
+
+
+class TicketPhotoAccess(models.Model):
+    photo = models.ForeignKey(TicketPhoto, on_delete=models.PROTECT, related_name="accesses")
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class TicketPhotoDisposal(models.Model):
+    photo = models.ForeignKey(TicketPhoto, on_delete=models.PROTECT, related_name="disposals")
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    reason = models.TextField()
+    policy_reference = models.CharField(max_length=200)
+    status = models.CharField(max_length=10, default="started", choices=[("started", "处理中"), ("completed", "已完成"), ("failed", "失败")])
+    created_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True)
+
+
 class AppendOnlyHistoryQuerySet(models.QuerySet):
     def update(self, **kwargs):
         raise TypeError("工单历史只能追加，不能更新。")

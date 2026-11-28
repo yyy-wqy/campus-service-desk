@@ -226,6 +226,10 @@ svg { display: block; }
 .ticket-status-group { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .ticket-status-pending { color: var(--amber-700) !important; background: var(--amber-100); border-color: #f5dfaf; }
 .cancellation-history { margin-top: 18px; overflow-wrap: anywhere; }
+.photo-gallery { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; }
+.photo-gallery figure { margin: 0 0 20px; min-width: 0; }
+.photo-gallery img { width: 100%; height: 180px; object-fit: contain; border-radius: 10px; background: #f4f7f6; }
+.photo-gallery figcaption { font-size: 12px; overflow-wrap: anywhere; }
 .cancellation-history article + article { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); }
 .empty-state { padding: 64px 24px; color: var(--ink-600); background: var(--paper); border: 1px dashed #bfd0ca; border-radius: var(--radius-md); text-align: center; }
 .empty-state h2 { margin: 0 0 8px; color: var(--ink-900); }

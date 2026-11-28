@@ -15,6 +15,8 @@ from .note_forms import TicketNoteForm
 from .note_services import can_add_ticket_note
 from .permissions import can_confirm_ticket, can_create_ticket, can_manage_ticket, visible_tickets
 from .query_forms import TicketQueryForm
+from .photo_forms import PhotoUploadForm
+from .photo_services import can_upload_photos
 from .repair_ui import repair_context
 from .services import (
     accept_and_assign_ticket,
@@ -35,7 +37,7 @@ def ticket_create(request):
         return HttpResponseForbidden("当前账号无权提交报修工单。")
 
     form_data = request.POST if request.method == "POST" else None
-    form = TicketCreateForm(form_data, reporter=request.user)
+    form = TicketCreateForm(form_data, request.FILES, reporter=request.user)
     if request.method == "POST" and form.is_valid():
         try:
             ticket = form.save()
@@ -116,6 +118,9 @@ def ticket_detail_context(
 ):
     context = {
         "ticket": ticket,
+        "photos": ticket.photos.filter(disposed_at=None),
+        "photo_form": PhotoUploadForm(),
+        "can_upload_photos": can_upload_photos(user, ticket),
         "can_request_cancellation": can_confirm_ticket(user, ticket) and can_request_cancellation(ticket),
         "can_review_cancellation": can_manage_ticket(user),
         "cancellation_records": ticket.cancellations.select_related("applicant", "reviewer"),

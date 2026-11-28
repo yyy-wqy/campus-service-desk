@@ -1,0 +1,21 @@
+<section class="surface-card">
+  <h2>现场照片</h2>
+  <div class="photo-gallery">
+    {% for photo in photos %}
+      <figure>
+        <a href="{% url 'tickets:photo_read' photo.pk %}" target="_blank" rel="noopener">
+          <img src="{% url 'tickets:photo_read' photo.pk %}" alt="现场照片 {{ forloop.counter }}" loading="lazy" referrerpolicy="no-referrer">
+        </a>
+        <figcaption>{{ photo.created_at|date:'Y-m-d H:i' }} · {{ photo.uploader.real_name|default:photo.uploader.username }}</figcaption>
+      </figure>
+    {% empty %}<p>暂无现场照片。</p>{% endfor %}
+  </div>
+  {% if can_upload_photos %}
+    <form class="ticket-form" method="post" enctype="multipart/form-data" action="{% url 'tickets:photo_upload' ticket.pk %}">
+      {% csrf_token %}
+      {{ photo_form.as_p }}
+      <p>照片只会追加，不能替换或删除。取消申请待审核时仍可补充现场照片。</p>
+      <button class="button button-secondary" type="submit">上传现场照片</button>
+    </form>
+  {% endif %}
+</section>

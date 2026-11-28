@@ -1,10 +1,12 @@
 from django.urls import path
 
-from . import note_views, repair_views, views
+from . import note_views, photo_views, repair_views, views
 
 app_name = "tickets"
 
 urlpatterns = [
+    path("<int:pk>/photos/", photo_views.upload, name="photo_upload"),
+    path("photos/<int:photo_id>/", photo_views.read, name="photo_read"),
     path("<int:pk>/repair/<str:action>/", repair_views.repair_action, name="repair_action"),
     path("<int:pk>/notes/", note_views.ticket_note_add, name="add_note"),
     path("", views.ticket_list, name="list"),
